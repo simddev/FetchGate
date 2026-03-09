@@ -4,7 +4,6 @@ public class Main {
     public static void main(String[] args) {
         int a = 7;
         int b = 6;
-        String c ="lel";
         String d = "how does it work";
     }
 }
