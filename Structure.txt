@@ -1,0 +1,32 @@
+┌───────────────────────────────────────────────────────────────┐
+│ External caller(s)                                             │
+│  - Python script / Java CLI / other tool                        │
+└───────────────┬───────────────────────────────────────────────┘
+                │ (HTTP/CLI)  localhost only
+                ▼
+┌───────────────────────────────────────────────────────────────┐
+│ Local Service (Java)                                           │
+│  Option A: Spring Boot API (optional)                           │
+│   - validates requests                                          │
+│   - queues / timeouts / logging                                 │
+│   - returns results to caller                                   │
+│  + Native Host Bridge                                           │
+│   - speaks Firefox Native Messaging over stdin/stdout           │
+└───────────────┬───────────────────────────────────────────────┘
+                │ Native Messaging (JSON messages)
+                ▼
+┌───────────────────────────────────────────────────────────────┐
+│ WebExtension (Firefox/LibreWolf)                               │
+│  Background (single source of truth)                           │
+│   - “armed tab” state + indicator                               │
+│   - receives commands from native host                          │
+│   - routes to active/armed tab                                  │
+│                                                               │
+│  Content Bridge (runs in the tab)                               │
+│   - executes TAB_FETCH via fetch()                              │
+│   - returns status/body                                         │
+│                                                               │
+│  Injector Placeholder (NOT implemented)                         │
+│   - ScriptRunner: would run *approved snippet IDs* only         │
+│   - requires explicit user confirmation                         │
+└───────────────────────────────────────────────────────────────┘
