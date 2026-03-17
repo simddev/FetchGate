@@ -119,8 +119,10 @@ replies left over from timed-out requests.
   gesture, so `activeTab` no longer applies; a host permission is needed.
   Without it, navigation would silently leave the tab without a content script
   while the badge still shows ON.
-- `tabs` — grants access to the `tabs` API used for tab lifecycle events
-  (`onUpdated`, `onRemoved`) and for sending messages to content scripts.
+- `tabs` — grants access to tab lifecycle events (`onUpdated`, `onRemoved`)
+  and ensures `changeInfo.status` is populated in `onUpdated` callbacks, which
+  FetchGate uses to detect when a navigation has completed and re-inject the
+  content script.
 
 **Design constraint:** the extension is intentionally minimal. Semantic
 validation (allowed methods, URL policy, header filtering) belongs in the native
