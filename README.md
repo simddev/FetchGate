@@ -1,222 +1,226 @@
 # FetchGate
 
 A Firefox/LibreWolf WebExtension that lets an external process execute
-authenticated `fetch()` calls through a live browser tab.
+authenticated `fetch()` calls through a live, logged-in browser tab.
 
 ## What it does
 
-When you are logged into a website, the browser holds session state (cookies,
-tokens, TLS client certificates) that is not directly accessible to an external
-program. FetchGate bridges that gap: a caller sends a request spec to the
+When you are logged into a website, the browser holds session state — cookies,
+tokens, TLS client certificates — that is not directly accessible to an external
+program. FetchGate bridges that gap: your code sends a request spec to the
 extension, which executes the corresponding `fetch()` inside the active tab and
-returns the full HTTP response — status, headers, and body.
+returns the full HTTP response: status code, headers, and body.
 
-The fetch runs in the tab's JavaScript context, so it inherits everything the
-browser already has for that site: cookies, session tokens, CORS policy. No
-credentials need to be extracted or replayed.
+Because the fetch runs inside the tab's JavaScript context, it inherits
+everything the browser already has for that site. No credentials need to be
+extracted or replayed.
 
 **Target use case:** extracting your own data from websites that have accounts
-but no API, or whose API access is blocked to third-party HTTP clients.
+but no API, or that block third-party HTTP clients.
 
 **Platform:** GNU/Linux only.
 
+## Choosing a host
+
+FetchGate requires a *native host* — a process that Firefox launches to bridge
+the extension and your code. Two implementations are provided:
+
+| | Java host | Python host |
+|---|---|---|
+| Location | `src/` | `host_py/` |
+| Requires | JDK 21+ | Python 3.6+ |
+| How it works | Persistent TCP server on `localhost:9919`; any caller connects to it | Firefox launches your Python script directly; the script IS the host |
+| Good for | Callers in any language, interactive use, multiple scripts | A single Python script that does a specific job |
+| Start it | Firefox starts it automatically on first arm | Firefox starts it automatically when you arm a tab |
+
+Both hosts speak the same protocol to the extension. The extension code is
+identical regardless of which host you use.
+
 ## Architecture
 
-Two native host implementations are provided. Both speak the same protocol to
-the extension; the extension code is identical in both cases.
-
-### Java host (TCP bridge)
+### Java host
 
 ```
-External Caller (any language)
+Your code (any language)
     │
-    │  newline-delimited JSON over TCP (localhost:9919)
-    │
-    ▼
-Native Host  (Java — src/)
-    │
-    │  Firefox Native Messaging — 4-byte LE length-prefixed JSON over stdin/stdout
+    │  newline-delimited JSON  ·  TCP localhost:9919
     │
     ▼
-Background Script  (background.js)
+Java native host  (src/)
+    │
+    │  Firefox Native Messaging  ·  4-byte LE length-prefixed JSON on stdin/stdout
+    │
+    ▼
+background.js
     │
     │  browser.tabs.sendMessage()
     │
     ▼
-Content Script  (content_script.js)
-    — runs fetch() inside the tab, inherits session state
-    — returns response to background → native host → caller
+content_script.js
+    └─ runs fetch() in the tab, returns response up the chain
 ```
 
-The Java host runs as a persistent TCP server on `localhost:9919`. Any language
-can reach it without knowing anything about the Native Messaging protocol. The
-host is launched by Firefox automatically when the tab is armed.
+Firefox launches the Java host automatically when you arm the first tab. It
+runs as a persistent server on `localhost:9919` until Firefox or the Java
+process exits. You connect to it from any language over plain TCP.
 
-### Python host (direct)
+### Python host
 
 ```
 Your Python script  (host_py/)
     │
-    │  Firefox Native Messaging — stdin/stdout  (your script IS the native host)
+    │  Firefox Native Messaging  ·  stdin/stdout  (your script IS the host)
     │
     ▼
-Background Script  (background.js)
+background.js
     │
     │  browser.tabs.sendMessage()
     │
     ▼
-Content Script  (content_script.js)
-    — runs fetch() inside the tab, inherits session state
-    — returns response to background → your script
+content_script.js
+    └─ runs fetch() in the tab, returns response up the chain
 ```
 
-Firefox launches your Python script directly when you arm a tab. The script
-imports `fetchgate.py`, calls `fg.fetch()`, and exits when done. No TCP server,
-no Java. Arming the tab IS the trigger that starts the script.
+Firefox launches your Python script when you arm a tab. The script calls
+`fg.fetch()` as many times as it needs, then exits. Arming the tab is
+the trigger that runs the script — there is no separate server to start.
 
-**IPC in detail:**
+## How it works internally
 
-- *Caller ↔ Java Native Host* — plain TCP on `localhost:9919`. One JSON object
-  per line (newline-delimited). Persistent connections are supported (multiple
-  sequential requests on one socket); the host closes only on timeout or error.
-  The host is **single-caller**: it handles one TCP connection at a time. See
-  Known Limitations.
+**Native Messaging protocol:** Firefox communicates with the native host using
+its [Native Messaging][nm] protocol — each message is a 4-byte little-endian
+unsigned integer (payload length in bytes) followed by a UTF-8 JSON payload,
+sent over the process's stdin/stdout. Firefox enforces a hard 1 MB per-message
+limit.
 
-- *Native Host ↔ Extension* — [Firefox Native Messaging][nm]: each message is
-  a 4-byte little-endian unsigned integer (payload length) followed by a UTF-8
-  JSON payload. Firefox launches the native host process on demand when the
-  extension calls `browser.runtime.connectNative('fetchgate')`.
+**Request envelope:** every request the host sends to Firefox is wrapped in a
+controlled outer object:
 
-- *Background ↔ Content Script* — `browser.tabs.sendMessage()` / `sendResponse`
-  within the browser process.
-
-**Extension permissions:**
-- `nativeMessaging` — required to call `browser.runtime.connectNative()`.
-- `activeTab` — grants script-injection access to the tab the user just clicked.
-  This is sufficient for the initial arm, but it expires after the click event.
-- `<all_urls>` — required for re-injection after the armed tab navigates to a
-  new page. The `tabs.onUpdated` listener calls `browser.tabs.executeScript`
-  outside of a user-gesture context, so `activeTab` does not apply there; a
-  host permission is needed instead. Without it, navigation would silently
-  leave the content script uninstalled while the badge still shows ON (or
-  disarm the tab, depending on the error path).
-- `tabs` — grants access to tab metadata needed by `browser.tabs.sendMessage`
-  and `browser.tabs.executeScript`.
-
-**Design constraint:** the extension code is intentionally minimal and dumb.
-Semantic validation (allowed methods, URL policy, etc.) belongs in the native
-host or the caller. Syntax validation is delegated to JavaScript's native JSON
-parser via the envelope mechanism described below.
-
-**Request envelope:** every request forwarded to Firefox is wrapped in a
-controlled envelope:
 ```json
 {"__fg_id": 1, "req": "{\"method\":\"GET\",\"url\":\"/\"}"}
 ```
-`__fg_id` is a monotonically increasing integer used for reply tracking.
-`req` is the caller's JSON encoded as a string — `background.js` calls
-`JSON.parse(msg.req)` to validate and extract it. This means JavaScript's
-native JSON parser validates the request structure, and `__fg_id` appears
-only in the outer envelope, eliminating false-positive response matching.
-`background.js` echoes `__fg_id` in the response. The host matches responses
-by ID and discards any stale replies left over from a previous timed-out
-request, eliminating the reply-misdelivery race.
+
+`__fg_id` is a per-request integer used for reply correlation. `req` is the
+caller's JSON serialised as a string — `background.js` calls
+`JSON.parse(msg.req)` to validate and unpack it. This keeps JSON structure
+validation inside the JavaScript engine and ensures `__fg_id` appears only in
+the outer layer, eliminating false-positive response matching. `background.js`
+echoes `__fg_id` in every reply; the host matches by ID and discards stale
+replies left over from timed-out requests.
+
+**Extension permissions:**
+- `nativeMessaging` — required to call `browser.runtime.connectNative()`.
+- `activeTab` — grants script-injection rights on the tab the user just
+  clicked. Sufficient for the initial arm, but expires after the click gesture.
+- `<all_urls>` — required for re-injection when the armed tab navigates. The
+  `tabs.onUpdated` listener calls `browser.tabs.executeScript` outside a user
+  gesture, so `activeTab` no longer applies; a host permission is needed.
+  Without it, navigation would silently leave the tab without a content script
+  while the badge still shows ON.
+- `tabs` — grants access to the `tabs` API used for tab lifecycle events
+  (`onUpdated`, `onRemoved`) and for sending messages to content scripts.
+
+**Design constraint:** the extension is intentionally minimal. Semantic
+validation (allowed methods, URL policy, header filtering) belongs in the native
+host or the caller. The extension's only job is to run `fetch()` and return the
+result.
 
 ## Message format
 
-**Request** (caller → host → extension):
+**Request** (from your code to the extension):
 
 ```json
 { "method": "GET", "url": "/api/v2/user/profile", "headers": {"Accept": "application/json"} }
 ```
 
-| Field         | Required | Description                                                        |
-|---------------|----------|--------------------------------------------------------------------|
-| `url`         | yes      | Absolute URL or path relative to the current tab origin            |
-| `method`      | no       | HTTP method; defaults to `GET`                                     |
-| `headers`     | no       | Object of additional request headers                               |
-| `body`        | no       | Request body (for POST/PUT)                                        |
-| `credentials` | no       | Fetch credentials mode: `"same-origin"` (default), `"include"`, or `"omit"` |
+| Field | Required | Description |
+|---|---|---|
+| `url` | yes | Absolute URL or path relative to the current tab's origin |
+| `method` | no | HTTP method — defaults to `GET` |
+| `headers` | no | Object of additional request headers |
+| `body` | no | Request body string (for POST, PUT, etc.) |
+| `credentials` | no | `"same-origin"` (default), `"include"`, or `"omit"` |
 
-`__fg_id` is used internally for reply tracking and must not be sent by callers; it is stripped from the response before it reaches the caller.
-
-**Response** (extension → host → caller):
+**Response** (from the extension back to your code):
 
 ```json
 { "status": 200, "statusText": "OK", "headers": {"content-type": "application/json"}, "body": "..." }
 ```
 
-The `body` field is always a string. Parse it based on `content-type`.
-On error, the response is `{ "error": "..." }`.
+The `body` field is always a string — parse it according to `content-type`.
+Errors are returned as `{ "error": "..." }` rather than thrown.
 
 ## Requirements
 
 - GNU/Linux
-- Firefox or LibreWolf
+- Firefox, Firefox Developer Edition, Firefox Nightly, or LibreWolf
 - **Java host:** JDK 21+
 - **Python host:** Python 3.6+
 
 ## Installation
 
-See **[INSTALL.md](INSTALL.md)** for full step-by-step setup instructions for
-both hosts.
+Full step-by-step instructions for both hosts are in **[INSTALL.md](INSTALL.md)**.
 
-**Java host (short version):**
+**Java host — quick summary:**
+1. `javac -d out src/*.java`
+2. Create `~/bin/fetchgate.sh` pointing at the compiled classes; `chmod +x` it
+3. Copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
+   and set `"path"` to your launcher script
+4. Load the extension via `about:debugging → Load Temporary Add-on`
 
-1. Compile: `javac -d out src/*.java`
-2. Create `fetchgate.sh` launcher; copy `fetchgate.json` to
-   `~/.mozilla/native-messaging-hosts/` with the correct path
-3. Load the extension via `about:debugging`
-
-**Python host (short version):**
-
-1. Write your script importing `host_py/fetchgate.py`; make it executable
-2. Copy `fetchgate_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
-   with the correct path
-3. Load the extension via `about:debugging`
+**Python host — quick summary:**
+1. Copy `host_py/example.py` to a permanent location; `chmod +x` it
+2. Edit it with your fetch calls (keep the `from fetchgate import FetchGate` line)
+3. Copy `fetchgate_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
+   and set `"path"` to your script
+4. Load the extension via `about:debugging → Load Temporary Add-on`
 
 ## Usage
 
 ### Java host
 
-1. Navigate to a site you are logged into
-2. Click the **FetchGate** toolbar button — Firefox launches the Java host
-   automatically; badge turns green **ON**
-3. Connect a caller to `localhost:9919` and send a JSON request line
-
-Quick test with netcat:
+1. Navigate to the site you want to query (log in if needed)
+2. Click the **FetchGate** toolbar button — Firefox starts the Java host and
+   the badge turns green **ON**
+3. From any terminal or program, send a JSON line to `localhost:9919`:
 
 ```bash
 echo '{"method":"GET","url":"/"}' | timeout 3 nc localhost 9919
 ```
 
-`timeout 3` is needed because the host keeps the connection open for persistent
-callers — without it `nc` hangs waiting for more data after the response.
+`timeout 3` is needed because the host keeps connections open for persistent
+callers — without it `nc` would hang after receiving the response.
 
 ### Python host
 
-1. Write your Python script (see `host_py/example.py`)
-2. Navigate to the target site
-3. Click the **FetchGate** toolbar button — Firefox launches your script immediately
-4. The script runs to completion; the badge shows ERR when it exits (normal)
+1. Navigate to the target site (log in if needed)
+2. Click the **FetchGate** toolbar button — Firefox immediately launches your
+   Python script; the badge turns green **ON** while it runs
+3. Your script calls `fg.fetch()` and does whatever it needs with the results
+4. When the script exits, the badge shows **ERR** — this is normal
 
 ```python
 #!/usr/bin/env python3
 import sys
+sys.path.insert(0, "/path/to/FetchGate/host_py")
 from fetchgate import FetchGate
 
 fg = FetchGate()
-# After FetchGate(), sys.stdout is redirected to sys.stderr to protect the
-# NM stream. Use sys.__stdout__ to write results to real stdout.
+# Note: after FetchGate(), sys.stdout is redirected to stderr to protect
+# the Native Messaging stream. Use sys.__stdout__ to write to real stdout.
+
 resp = fg.fetch({"method": "GET", "url": "/api/data"})
 if "error" not in resp:
     sys.__stdout__.write(resp["body"])
+    sys.__stdout__.flush()
 ```
+
+Click the toolbar button again to re-run the script.
 
 ## Building and testing
 
 ```bash
-# Compile
+# Compile Java source
 javac -d out src/*.java
 
 # Run the test suite (64 tests, no external dependencies)
@@ -224,118 +228,121 @@ javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
 
+The Python host requires no compilation. Python 3.6+ is the only requirement.
+
 ## Security model
 
-**Java host:** the host binds to `localhost` only, so it is not reachable from
-other machines. However, **any process on the local machine that can reach
-`localhost:9919`** can send requests and have them executed in the currently
-armed browser tab — including other applications, scripts, and (on a multi-user
-system) other users. There is no authentication. Do not run the Java host on
-shared or multi-user infrastructure.
+**Java host:** the TCP server binds exclusively to `localhost` and is not
+reachable from other machines. However, **any local process that can reach
+`localhost:9919`** — including other applications, scripts, and on a multi-user
+system, other users — can send requests to the armed tab. There is no
+authentication.
 
-**Python host:** there is no TCP port. Only the Python script that Firefox
-launches — the one registered in the native messaging manifest — can send
-requests. This is inherently more constrained: access is limited to a single
-known executable on the local machine.
+Important: the TCP server starts when the first tab is armed and **stays open
+until Firefox or the Java process exits**. Disarming a tab does not close the
+port. If you arm a tab to run a single request and then disarm it, the port
+remains accessible until you close Firefox.
 
-Both models are accepted trade-offs for a personal single-user tool.
+**Python host:** there is no TCP port. Only the Python script registered in the
+native messaging manifest can interact with the extension, and only while
+Firefox has it running (i.e. while a tab is armed). This makes the Python host
+inherently more contained.
+
+Both models are acceptable trade-offs for a personal tool on a single-user
+machine. Do not run the Java host on shared or multi-user infrastructure.
 
 ## Known limitations
 
-- **Single caller at a time. *(Java host)*** The host handles one TCP connection
-  at a time. While waiting for Firefox to respond to a request — or simply
-  waiting for the current caller to send its next line — no other caller can
-  connect or be served. An idle open socket monopolises the service. For
-  single-user personal-tool use this is fine; use short-lived connections
-  (connect, send one request, read the response, disconnect) if multiple callers
-  need to interleave.
+- **Single caller at a time. *(Java host only)*** The host handles one TCP
+  connection at a time. While a request is in flight — or while the current
+  caller has the socket open without sending — no second caller can be served.
+  For personal use this is fine; use short-lived connections (connect, request,
+  read response, disconnect) if multiple callers need to share the service.
 
-- **Single-line JSON only. *(Java host)*** The caller-side TCP protocol is
-  newline-delimited. Each line is validated independently; a line that does not
-  form a complete JSON object (starts with `{`, ends with `}`) is rejected with
-  an error. Always send compact, single-line JSON.
+- **Single-line JSON only. *(Java host only)*** The TCP protocol is
+  newline-delimited. Each line must be a complete, compact JSON object — it must
+  start with `{` and end with `}`. Multi-line or pretty-printed JSON will be
+  rejected with an error.
 
-- **30-second request timeout. *(Java host)*** If the extension does not respond
-  within 30 s the host returns `{"error":"timeout: ..."}` to the caller. The
-  in-tab `fetch()` is not cancelled; it continues running in the browser. The
-  stale reply is discarded by ID matching but the request still consumes a
-  browser connection slot.
+- **30-second request timeout. *(Java host only)*** If the extension does not
+  reply within 30 seconds, the host sends `{"error":"timeout: ..."}` and closes
+  the connection. The in-tab `fetch()` continues running in the browser; the
+  eventual late reply is discarded by ID matching.
 
-- **No request timeout. *(Python host)*** `fetch()` blocks until the extension
-  replies or the Native Messaging connection is closed. If a network request
-  hangs (slow or unresponsive server), the script will block indefinitely.
+- **No request timeout. *(Python host only)*** `fetch()` blocks until the
+  extension replies or the Native Messaging connection closes. If the server
+  being queried is slow or unresponsive, the script will block indefinitely.
 
-- **One armed tab at a time.** The background script tracks a single armed tab.
-  Arming a second tab automatically disarms the first. If the native host
-  disconnects (ERR badge), clicking the toolbar button once re-arms and
-  reconnects; a second click is not required.
+- **One armed tab at a time.** The extension tracks a single armed tab. Arming
+  a second tab automatically disarms the first. After a disconnect (ERR badge),
+  one toolbar click re-arms the tab and reconnects the host — no double-click
+  needed.
 
 - **Extension reloads on browser restart.** Temporary add-ons (loaded via
-  `about:debugging`) are not persisted across Firefox restarts. See
-  `INSTALL.md` for the persistent `.xpi` install option.
+  `about:debugging`) do not survive browser restarts. See INSTALL.md for the
+  persistent `.xpi` install option, which requires a Firefox variant that
+  allows unsigned extensions.
 
-- **Response body capped at ~800 KB.** The Native Messaging protocol has a hard
-  1 MB per-message limit. The content script checks the response body size
-  before sending and returns `{"error": "response body too large ..."}` if it
-  exceeds ~800 KB, leaving headroom for headers and JSON overhead. Full HTML
-  pages of heavy sites (YouTube, etc.) typically exceed this; API responses
-  returning JSON rarely do.
+- **Response body capped at ~800 KB.** Firefox's Native Messaging protocol
+  limits individual messages to 1 MB. The content script measures the response
+  body in UTF-8 bytes and returns `{"error":"response body too large ..."}` if
+  it exceeds ~800 KB, keeping headroom for headers and JSON encoding overhead.
+  API responses are typically well under this limit; full HTML pages of
+  content-heavy sites (e.g. YouTube) often exceed it.
 
-- **Cross-origin requests do not send credentials by default.** The default
-  `fetch()` credentials mode is `same-origin`, so cookies and auth headers are
-  only forwarded automatically for URLs on the same origin as the armed tab.
-  For cross-origin absolute URLs, add `"credentials":"include"` to the request
-  spec — but this only works if the target server responds with
-  `Access-Control-Allow-Credentials: true` and a non-wildcard origin; otherwise
-  the browser blocks the response.
+- **Cross-origin requests require explicit credentials opt-in.** The default
+  `fetch()` credentials mode is `"same-origin"`, meaning cookies and auth
+  headers are only sent automatically for URLs on the same origin as the armed
+  tab. For cross-origin URLs, set `"credentials":"include"` — but the target
+  server must also respond with `Access-Control-Allow-Credentials: true` and a
+  specific (non-wildcard) origin, or the browser will block the response.
 
-- **Multiple `Set-Cookie` response headers are deduplicated.** `content_script.js`
-  stores response headers in a plain JavaScript object. The Fetch API combines
-  most duplicate header values with `, ` before they reach `forEach`, but
-  `Set-Cookie` is an exception: each cookie arrives as a separate call. Because
-  the object assignment `headers[name] = value` overwrites on each call, only
-  the last cookie value is kept. For typical data-extraction requests this is
-  irrelevant; for responses that set multiple cookies in one reply, all but the
-  last are silently dropped.
+- **Multiple `Set-Cookie` response headers are deduplicated.** The content
+  script stores headers in a plain JavaScript object. The Fetch API combines
+  most duplicate header values with `, `, but delivers each `Set-Cookie` value
+  as a separate call. Because plain object assignment overwrites on each call,
+  only the last `Set-Cookie` value survives. This rarely matters for
+  data-extraction requests.
 
-- **Response body is always UTF-8 text.** `content_script.js` reads the
-  response body with `response.text()`, which the Fetch specification always
-  decodes as UTF-8. Binary payloads (images, PDFs, ZIPs, protobuf) and
-  responses in non-UTF-8 encodings (e.g. legacy Windows-1252 or Shift-JIS
-  pages) will be corrupted in transit. HTML and JSON responses in UTF-8 are
-  unaffected.
+- **Response body is always decoded text.** The content script reads the body
+  with `response.text()`, which decodes the response using the charset declared
+  in the `Content-Type` header (or UTF-8 if absent). Binary payloads (images,
+  PDFs, ZIPs, protobuf) will be corrupted — there is no way to retrieve raw
+  bytes through this path. Text responses in correctly-declared non-UTF-8
+  encodings (Shift-JIS, Windows-1252, etc.) will arrive as Unicode strings and
+  are not corrupted; pages that omit or mis-declare their encoding may be.
 
-- **Logs may contain sensitive data.** Requests and responses are logged to
-  stderr (truncated at 120 characters). On a multi-user system these may
-  appear in terminal history or journal logs. Run the host in a dedicated
-  terminal and avoid piping stderr to persistent storage.
+- **Logs may contain sensitive data.** Both hosts log requests and responses to
+  stderr, truncated at 120 characters. On a multi-user system this output may
+  be visible in terminal history or system journals. Run the host in a dedicated
+  terminal; do not pipe stderr to persistent storage.
 
 ## Project structure
 
 ```
 src/                    Java native host (TCP bridge)
-  Main.java             Entry point; stdout redirect to protect the NM channel
+  Main.java             Entry point — redirects stdout to stderr to protect NM channel
   NativeMessaging.java  Firefox Native Messaging framing (length-prefixed JSON)
-  NativeHost.java       TCP server + stdin-reader thread + request lifecycle
+  NativeHost.java       TCP server, stdin-reader thread, full request lifecycle
 
-host_py/                Python native host (direct, no TCP)
-  fetchgate.py          NM client library — import this in your script
-  example.py            Ready-to-run example script
+host_py/                Python native host (direct — no TCP)
+  fetchgate.py          Native Messaging library; import this in your script
+  example.py            Working example script to copy and customise
 
-extension/              WebExtension (shared by both hosts)
+extension/              WebExtension — shared by both hosts, never changes
   manifest.json         MV2 manifest; extension ID: fetchgate@localhost
   background.js         Armed-tab state, connectNative(), message routing
-  content_script.js     Executes fetch() in tab context, returns response
+  content_script.js     Executes fetch() in the tab, returns the response
 
-tests/                  Test suite (plain Java, no framework)
-  TestRunner.java       Test runner and harness
+tests/                  Java test suite (no external framework)
+  TestRunner.java       Runner and output harness
   Assert.java           Assertion helpers
-  NativeMessagingTest.java
-  NativeHostTest.java
+  NativeMessagingTest.java  NM framing protocol tests
+  NativeHostTest.java       TCP↔NM bridge and request lifecycle tests
 
-fetchgate.json          NM manifest template — Java host
-fetchgate_py.json       NM manifest template — Python host
-INSTALL.md              Step-by-step installation instructions
+fetchgate.json          Native Messaging manifest template — Java host
+fetchgate_py.json       Native Messaging manifest template — Python host
+INSTALL.md              Step-by-step installation guide
 ```
 
 ## License
