@@ -18,7 +18,6 @@ Setup
    the FetchGate toolbar button. Firefox will launch this script immediately.
 """
 
-import json
 import sys
 import os
 
@@ -28,6 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fetchgate import FetchGate, FetchGateError
 
 fg = FetchGate()
+# After FetchGate(), sys.stdout is redirected to sys.stderr to protect the
+# NM stream. Use sys.__stdout__ to write results to real stdout (for piping).
 
 # --- put your fetch calls below ---
 
@@ -41,10 +42,11 @@ try:
     print(f"Status : {resp['status']} {resp['statusText']}", file=sys.stderr)
     print(f"Body   : {len(resp['body'])} chars", file=sys.stderr)
 
-    # Write the body to stdout (safe after FetchGate redirected sys.stdout
-    # to stderr — we write to the real stdout via the file descriptor).
-    with os.fdopen(os.dup(1), "w") as real_stdout:
-        real_stdout.write(resp["body"])
+    # Write the body to real stdout (e.g. for piping to a file or another tool).
+    # sys.__stdout__ always points to the original stdout regardless of the
+    # sys.stdout redirect that FetchGate() performs.
+    sys.__stdout__.write(resp["body"])
+    sys.__stdout__.flush()
 
 except FetchGateError as e:
     print(f"Connection lost: {e}", file=sys.stderr)
