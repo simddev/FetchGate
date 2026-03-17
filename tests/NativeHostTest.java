@@ -144,8 +144,9 @@ public class NativeHostTest {
         });
 
         TestRunner.test("request fields are preserved when forwarded to Firefox", () -> {
-            // The host injects __fg_id but must not alter any caller-supplied fields.
-            // readForwardedId(request) strips __fg_id and asserts the remainder matches.
+            // The host wraps the request in an envelope; the original JSON must be
+            // preserved verbatim inside the "req" field. readForwardedId(request)
+            // decodes "req" and asserts it equals the original.
             try (Fixture f = new Fixture()) {
                 String request = "{\"method\":\"POST\",\"url\":\"/submit\",\"body\":\"data\"}";
                 f.sendAsCaller(request);
@@ -667,6 +668,41 @@ public class NativeHostTest {
                 int id2 = f.readForwardedId();
                 NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id2));
                 Assert.equal(expected, result2.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("persistent caller: Firefox dies between requests — second request gets fast error", () -> {
+            // Regression for the sentinel-clearing race: responseQueue.clear() at the
+            // start of each request would consume the SHUTDOWN_SENTINEL before the poll
+            // loop could find it. The firefoxAlive flag now short-circuits this path so
+            // the caller gets an immediate error rather than waiting for the full timeout.
+            try (Fixture f = new Fixture()) {
+                try (Socket         s   = new Socket("127.0.0.1", f.host.getBoundPort());
+                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+
+                    // First request completes normally — proves the connection works.
+                    out.println("{\"method\":\"GET\",\"url\":\"/first\"}");
+                    int id1 = f.readForwardedId();
+                    NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200}", id1));
+                    Assert.equal("{\"status\":200}", in.readLine());
+
+                    // Firefox now disconnects.
+                    f.firefoxResponseWriter.close();
+                    Thread.sleep(100); // let stdin-reader detect EOF and set firefoxAlive=false
+
+                    // Same persistent socket: send a second request.
+                    long start = System.currentTimeMillis();
+                    out.println("{\"method\":\"GET\",\"url\":\"/second\"}");
+                    String reply = in.readLine();
+                    long elapsed = System.currentTimeMillis() - start;
+
+                    Assert.notNull(reply, "caller must receive an error, not hang");
+                    Assert.contains(reply, "error");
+                    // Must not wait for the full timeout — firefoxAlive flag should trigger immediately.
+                    Assert.isTrue(elapsed < TEST_TIMEOUT_MS / 2,
+                            "expected fast error after Firefox EOF, but waited " + elapsed + " ms");
+                }
             }
         });
 

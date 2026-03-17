@@ -5,10 +5,10 @@
 From the project root:
 
 ```bash
-javac src/*.java
+javac -d out src/*.java
 ```
 
-Class files land in `src/`. Requires JDK 21+.
+Class files land in `out/`. Requires JDK 21+.
 
 ## 2. Create the launcher script
 
@@ -18,7 +18,7 @@ script (anywhere permanent, e.g. `~/bin/fetchgate.sh`):
 
 ```bash
 #!/bin/bash
-exec java -cp /absolute/path/to/FetchGate/src Main
+exec java -cp /absolute/path/to/FetchGate/out Main
 ```
 
 Replace `/absolute/path/to/FetchGate` with the real path. Make it executable:
