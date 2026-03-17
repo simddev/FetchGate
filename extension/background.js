@@ -32,17 +32,21 @@ function connect() {
 
 // Forward the request to the armed tab's content script, then send the
 // response back to the host.
+// The __fg_id field injected by the native host is echoed back in every
+// response so the host can match replies to requests and discard stale ones.
 async function onRequestFromHost(request) {
+    const id = request.__fg_id;
+
     if (armedTabId === null) {
-        sendToHost({ error: 'no tab is armed' });
+        sendToHost({ __fg_id: id, error: 'no tab is armed' });
         return;
     }
 
     try {
         const response = await browser.tabs.sendMessage(armedTabId, request);
-        sendToHost(response);
+        sendToHost({ __fg_id: id, ...response });
     } catch (e) {
-        sendToHost({ error: e.message });
+        sendToHost({ __fg_id: id, error: e.message });
     }
 }
 
