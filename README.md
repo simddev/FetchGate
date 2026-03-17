@@ -147,10 +147,13 @@ In short:
 Quick test with netcat:
 
 ```bash
-echo '{"method":"GET","url":"/"}' | nc localhost 9919
+echo '{"method":"GET","url":"/"}' | timeout 3 nc localhost 9919
 ```
 
 You should receive a single JSON line with `status`, `headers`, and `body`.
+`timeout 3` is needed because the host keeps the connection open for persistent
+callers — without it `nc` hangs waiting for more data after receiving the
+response.
 
 ## Building and testing
 
