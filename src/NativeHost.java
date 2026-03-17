@@ -27,29 +27,72 @@ import java.util.concurrent.*;
  */
 public class NativeHost {
 
-    static final int PORT    = 9919;
-    static final int TIMEOUT = 30_000; // ms
+    static final int DEFAULT_PORT    = 9919;
+    static final int DEFAULT_TIMEOUT = 30_000; // ms
 
     private final InputStream  nativeIn;
     private final OutputStream nativeOut;
+    private final int          port;
+    private final int          timeoutMs;
 
     // Responses from Firefox land here; polled by the thread handling the current caller.
     private final BlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
 
+    // Set once the ServerSocket is bound; lets tests discover the OS-assigned port.
+    private volatile int          boundPort    = -1;
+    private volatile ServerSocket serverSocket;
+
+    /** Production constructor — uses the fixed port and timeout. */
     public NativeHost(InputStream nativeIn, OutputStream nativeOut) {
+        this(nativeIn, nativeOut, DEFAULT_PORT, DEFAULT_TIMEOUT);
+    }
+
+    /** Test constructor — accepts an arbitrary port (0 = OS-assigned) and timeout. */
+    NativeHost(InputStream nativeIn, OutputStream nativeOut, int port, int timeoutMs) {
         this.nativeIn  = nativeIn;
         this.nativeOut = nativeOut;
+        this.port      = port;
+        this.timeoutMs = timeoutMs;
+    }
+
+    /**
+     * Returns the port the server is actually listening on.
+     * Only valid after start() has been called from another thread.
+     * Poll until > 0 to wait for readiness.
+     */
+    public int getBoundPort() { return boundPort; }
+
+    /**
+     * Shut down the TCP server (interrupts the accept() loop).
+     * Safe to call multiple times. The stdin-reader daemon thread exits when
+     * the JVM does (or when its pipe is closed in tests).
+     */
+    public void stop() {
+        try {
+            if (serverSocket != null) serverSocket.close();
+        } catch (IOException e) {
+            log("Error stopping server: " + e.getMessage());
+        }
     }
 
     public void start() throws Exception {
         startStdinReader();
 
-        try (ServerSocket server = new ServerSocket(PORT, 50, InetAddress.getLoopbackAddress())) {
-            log("TCP server listening on localhost:" + PORT);
+        serverSocket = new ServerSocket(port, 50, InetAddress.getLoopbackAddress());
+        boundPort = serverSocket.getLocalPort();
+        log("TCP server listening on localhost:" + boundPort);
+
+        ServerSocket ss = serverSocket;
+        try (ss) {
             while (true) {
-                Socket client = server.accept();
-                log("Caller connected: " + client.getRemoteSocketAddress());
-                handleCaller(client);
+                try {
+                    Socket client = serverSocket.accept();
+                    log("Caller connected: " + client.getRemoteSocketAddress());
+                    handleCaller(client);
+                } catch (SocketException e) {
+                    if (serverSocket.isClosed()) break; // stop() was called
+                    throw e;
+                }
             }
         }
     }
@@ -65,14 +108,15 @@ public class NativeHost {
                     String msg = NativeMessaging.read(nativeIn);
                     if (msg == null) {
                         log("Native Messaging connection closed by Firefox — shutting down.");
-                        System.exit(0);
+                        stop(); // closes the server socket, breaking the accept() loop
+                        return;
                     }
                     log("← Firefox: " + msg);
                     responseQueue.put(msg);
                 }
             } catch (Exception e) {
                 log("stdin-reader fatal error: " + e.getMessage());
-                System.exit(1);
+                stop();
             }
         }, "stdin-reader");
 
@@ -107,9 +151,9 @@ public class NativeHost {
             log("→ Firefox: " + request);
 
             // Block until the extension responds or the timeout expires.
-            String response = responseQueue.poll(TIMEOUT, TimeUnit.MILLISECONDS);
+            String response = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
             if (response == null) {
-                response = "{\"error\":\"timeout: no response from extension after " + TIMEOUT + " ms\"}";
+                response = "{\"error\":\"timeout: no response from extension after " + timeoutMs + " ms\"}";
                 log("Timed out waiting for Firefox response");
             }
 

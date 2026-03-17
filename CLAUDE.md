@@ -59,6 +59,15 @@ Response (extension → caller via native host):
 No build automation configured yet. Compile Java with `javac`/`java` (JDK 21) or use IntelliJ IDEA.
 
 ```bash
-javac src/Main.java
-java -cp src Main
+javac -d out src/*.java
+java  -cp out Main
 ```
+
+## Tests
+
+```bash
+javac -d out src/*.java tests/*.java
+java  -cp out TestRunner
+```
+
+23 tests across two suites: `NativeMessaging` (framing protocol) and `NativeHost` (TCP↔NM bridge). No external dependencies. `out/` is gitignored.
