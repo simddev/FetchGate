@@ -35,6 +35,10 @@ public class NativeHost {
     private final int          port;
     private final int          timeoutMs;
 
+    // Sentinel value placed in responseQueue by the stdin-reader when Firefox disconnects.
+    // Allows handleCaller to return an immediate error instead of waiting for the full timeout.
+    static final String SHUTDOWN_SENTINEL = "\0SHUTDOWN\0";
+
     // Responses from Firefox land here; polled by the thread handling the current caller.
     private final BlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
 
@@ -108,6 +112,7 @@ public class NativeHost {
                     String msg = NativeMessaging.read(nativeIn);
                     if (msg == null) {
                         log("Native Messaging connection closed by Firefox — shutting down.");
+                        responseQueue.offer(SHUTDOWN_SENTINEL); // unblock any waiting caller immediately
                         stop(); // closes the server socket, breaking the accept() loop
                         return;
                     }
@@ -136,37 +141,44 @@ public class NativeHost {
                                       new OutputStreamWriter(client.getOutputStream(), "UTF-8"),
                                       /*autoFlush=*/ true)) {
 
-            String request = in.readLine();
-            if (request == null || request.isBlank()) return;
-            log("← Caller: " + request);
+            String request;
+            while ((request = in.readLine()) != null) {
+                if (request.isBlank()) continue;
+                log("← Caller: " + request);
 
-            // Discard any stale response left in the queue from a previous
-            // timed-out request that arrived late.
-            responseQueue.clear();
+                // Discard any stale response left in the queue from a previous
+                // timed-out request that arrived late.
+                responseQueue.clear();
 
-            // Forward the request to the extension via Native Messaging.
-            // Catch write failures (oversized request, broken pipe) and return a
-            // proper error JSON to the caller rather than silently closing the socket.
-            try {
-                synchronized (nativeOut) {
-                    NativeMessaging.write(nativeOut, request);
+                // Forward the request to the extension via Native Messaging.
+                // Catch write failures (oversized request, broken pipe) and return a
+                // proper error JSON to the caller rather than silently closing the socket.
+                try {
+                    synchronized (nativeOut) {
+                        NativeMessaging.write(nativeOut, request);
+                    }
+                } catch (IOException e) {
+                    log("Failed to forward request: " + e.getMessage());
+                    out.println("{\"error\":\"failed to forward to extension: " + e.getMessage() + "\"}");
+                    break; // can't forward any more requests; close this connection
                 }
-            } catch (IOException e) {
-                log("Failed to forward request: " + e.getMessage());
-                out.println("{\"error\":\"failed to forward to extension: " + e.getMessage() + "\"}");
-                return;
-            }
-            log("→ Firefox: " + request);
+                log("→ Firefox: " + request);
 
-            // Block until the extension responds or the timeout expires.
-            String response = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
-            if (response == null) {
-                response = "{\"error\":\"timeout: no response from extension after " + timeoutMs + " ms\"}";
-                log("Timed out waiting for Firefox response");
-            }
+                // Block until the extension responds, the timeout expires, or Firefox disconnects.
+                String response = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
+                if (response == null) {
+                    response = "{\"error\":\"timeout: no response from extension after " + timeoutMs + " ms\"}";
+                    log("Timed out waiting for Firefox response");
+                } else if (SHUTDOWN_SENTINEL.equals(response)) {
+                    response = "{\"error\":\"connection to Firefox was closed\"}";
+                    log("Firefox disconnected — returning error to caller");
+                    out.println(response);
+                    break;
+                }
 
-            log("→ Caller: " + response);
-            out.println(response);
+                log("→ Caller: " + response);
+                out.println(response);
+            }
 
         } catch (Exception e) {
             log("Error handling caller: " + e.getMessage());

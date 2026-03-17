@@ -55,6 +55,8 @@ The `name` field (`"fetchgate"`) must match the string passed to
 
 ## 4. Load the extension
 
+### Option A — Temporary (for development)
+
 1. Open Firefox or LibreWolf and navigate to `about:debugging`
 2. Click **This Firefox**
 3. Click **Load Temporary Add-on...**
@@ -62,6 +64,27 @@ The `name` field (`"fetchgate"`) must match the string passed to
 
 The FetchGate button appears in the toolbar. It stays loaded until the browser
 is restarted. Repeat this step after each restart.
+
+### Option B — Persistent (survives restarts)
+
+Firefox normally requires extensions to be signed by Mozilla, but you can
+bypass this for personal use:
+
+1. Navigate to `about:config` and set:
+   ```
+   xpinstall.signatures.required = false
+   ```
+2. Package the extension as a `.xpi` file (a zip of the `extension/` directory):
+   ```bash
+   cd extension && zip -r ../fetchgate.xpi . && cd ..
+   ```
+3. Navigate to `about:addons`, click the gear icon, and choose
+   **Install Add-on From File...**
+4. Select `fetchgate.xpi`
+
+The extension now persists across restarts without `about:debugging`.
+Note: `xpinstall.signatures.required` is not available in the release builds of
+Firefox — use Firefox Developer Edition, Firefox Nightly, or LibreWolf.
 
 ## 5. Smoke test
 

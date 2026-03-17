@@ -131,9 +131,6 @@ java  -cp out TestRunner
 
 ## Known limitations
 
-- **One request per connection.** The host closes the TCP socket after each
-  response. Callers must open a new connection per request.
-
 - **Single-line JSON only.** The caller-side TCP protocol is newline-delimited.
   Sending pretty-printed (multi-line) JSON will cause silent truncation at the
   first newline. Always send compact, single-line JSON.
@@ -142,14 +139,11 @@ java  -cp out TestRunner
   Arming a second tab automatically disarms the first.
 
 - **Extension reloads on browser restart.** Temporary add-ons (loaded via
-  `about:debugging`) are not persisted across Firefox restarts.
+  `about:debugging`) are not persisted across Firefox restarts. See
+  `INSTALL.md` for the persistent `.xpi` install option.
 
 - **30-second request timeout.** If the extension does not respond within 30 s
   the host returns `{"error":"timeout: ..."}` to the caller.
-
-- **Firefox disconnects during a request.** If the native host connection is lost
-  while a request is in-flight, the caller will wait out the full 30-second
-  timeout before receiving the error response.
 
 ## Project structure
 
