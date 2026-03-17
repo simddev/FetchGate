@@ -47,8 +47,8 @@ Content Script  (content_script.js)
 **IPC in detail:**
 
 - *Caller ↔ Native Host* — plain TCP on `localhost:9919`. One JSON object per
-  line (newline-delimited). One request per connection; the host closes the
-  socket after replying.
+  line (newline-delimited). Persistent connections are supported; the host
+  closes only on timeout or error.
 
 - *Native Host ↔ Extension* — [Firefox Native Messaging][nm]: each message is
   a 4-byte little-endian unsigned integer (payload length) followed by a UTF-8
@@ -61,6 +61,11 @@ Content Script  (content_script.js)
 **Design constraint:** the extension code is intentionally minimal and dumb.
 No validation logic lives in JavaScript. All of that belongs in the Java host
 or the caller.
+
+**Reply integrity:** every request forwarded to Firefox carries an injected
+`__fg_id` field (incrementing integer). `background.js` echoes it in the
+response. The host matches responses by ID and discards any stale replies left
+over from a previous timed-out request, eliminating the reply-misdelivery race.
 
 ## Message format
 

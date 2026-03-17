@@ -11,6 +11,13 @@ import java.util.concurrent.*;
  * exercises it via a real TCP connection on localhost.
  *
  * Helper: Fixture sets up the plumbing common to most tests.
+ *
+ * Request ID protocol:
+ *   NativeHost injects a unique "__fg_id" field into every request it forwards
+ *   to Firefox. background.js echoes the field in the response. The host matches
+ *   responses by ID and discards any stale replies left over from timed-out
+ *   requests. Tests use Fixture helpers (readForwardedId, tagged) to participate
+ *   in this protocol from the "Firefox side" of the pipe.
  */
 public class NativeHostTest {
 
@@ -79,8 +86,8 @@ public class NativeHostTest {
 
                 Future<String> callerResult = f.sendAsCaller(request);
 
-                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
-                NativeMessaging.write(f.firefoxResponseWriter, response);
+                int id = f.readForwardedId(request); // verifies original fields intact
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
 
                 Assert.equal(response, callerResult.get(2, TimeUnit.SECONDS));
             }
@@ -99,8 +106,8 @@ public class NativeHostTest {
                         + "\"body\":\"{\\\"orderId\\\":99}\"}";
 
                 Future<String> result = f.sendAsCaller(request);
-                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
-                NativeMessaging.write(f.firefoxResponseWriter, response);
+                int id = f.readForwardedId(request);
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
                 Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -113,8 +120,8 @@ public class NativeHostTest {
                         + "\"headers\":{\"content-type\":\"text/plain\"},\"body\":\"no such resource\"}";
 
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/missing\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, response);
+                int id = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
                 Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -128,27 +135,31 @@ public class NativeHostTest {
                         + "\"{\\\"name\\\":\\\"Řehoř Čapek\\\",\\\"city\\\":\\\"Brně\\\"}\"}";
 
                 Future<String> result = f.sendAsCaller(request);
-                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
-                NativeMessaging.write(f.firefoxResponseWriter, response);
+                int id = f.readForwardedId(request);
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
                 Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
 
-        TestRunner.test("request forwarded to Firefox verbatim (no modification)", () -> {
+        TestRunner.test("request fields are preserved when forwarded to Firefox", () -> {
+            // The host injects __fg_id but must not alter any caller-supplied fields.
+            // readForwardedId(request) strips __fg_id and asserts the remainder matches.
             try (Fixture f = new Fixture()) {
                 String request = "{\"method\":\"POST\",\"url\":\"/submit\",\"body\":\"data\"}";
                 f.sendAsCaller(request);
-                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
-                NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
+                int id = f.readForwardedId(request); // assertion happens inside
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200}", id));
             }
         });
 
         TestRunner.test("response forwarded to caller verbatim (no modification)", () -> {
+            // The host strips __fg_id from the Firefox response before passing it to
+            // the caller. All other fields must be forwarded without alteration.
             try (Fixture f = new Fixture()) {
                 String response = "{\"status\":403,\"statusText\":\"Forbidden\",\"body\":\"nope\"}";
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, response);
+                int id = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
                 Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -158,8 +169,8 @@ public class NativeHostTest {
             try (Fixture f = new Fixture()) {
                 String response = "{\"status\":200,\"body\":\"line1\\nline2\\ttab\\u00e9\"}";
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, response);
+                int id = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
                 Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -173,8 +184,8 @@ public class NativeHostTest {
                 String response = "{\"status\":200,\"body\":\"" + new String(body) + "\"}";
 
                 Future<String> result = f.sendAsCaller(request);
-                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
-                NativeMessaging.write(f.firefoxResponseWriter, response);
+                int id = f.readForwardedId(request);
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
                 Assert.equal(response, result.get(3, TimeUnit.SECONDS));
             }
         });
@@ -185,8 +196,8 @@ public class NativeHostTest {
                     String req  = "{\"seq\":" + i + ",\"url\":\"/item/" + i + "\"}";
                     String resp = "{\"status\":200,\"seq\":" + i + "}";
                     Future<String> result = f.sendAsCaller(req);
-                    Assert.equal(req,  NativeMessaging.read(f.hostRequestReader));
-                    NativeMessaging.write(f.firefoxResponseWriter, resp);
+                    int id = f.readForwardedId(req);
+                    NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(resp, id));
                     Assert.equal(resp, result.get(2, TimeUnit.SECONDS));
                 }
             }
@@ -211,38 +222,42 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("stale response from timed-out request is cleared before next request", () -> {
+        TestRunner.test("stale response is discarded by ID mismatch — next request gets correct response", () -> {
+            // The ID-based fix: the host discards any response whose __fg_id does not
+            // match the current request, regardless of timing. The stale reply from a
+            // previous timed-out request has the old ID and is rejected even if it
+            // arrives before the clear() of the next request.
             try (Fixture f = new Fixture()) {
                 Future<String> result1 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/first\"}");
-                NativeMessaging.read(f.hostRequestReader);
+                int staleId = f.readForwardedId();
                 Assert.contains(result1.get(TEST_TIMEOUT_MS + 1000, TimeUnit.MILLISECONDS), "timeout");
 
-                // Firefox delivers a late reply for the timed-out request
-                NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200,\"body\":\"late\"}");
-                Thread.sleep(60);
+                // Firefox delivers a late reply tagged with the OLD ID.
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200,\"body\":\"late\"}", staleId));
+                Thread.sleep(60); // let stdin-reader enqueue the stale response
 
-                // The next request must receive its own response, not the stale one
+                // The next request must receive its own response (new ID), not the stale one.
                 String expected = "{\"status\":200,\"body\":\"correct\"}";
                 Future<String> result2 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/second\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                int id2 = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id2));
                 Assert.equal(expected, result2.get(2, TimeUnit.SECONDS));
             }
         });
 
         TestRunner.test("unsolicited Firefox message arriving between requests is cleared", () -> {
             // Firefox could theoretically send a message when no request is in flight.
-            // The responseQueue.clear() before each request must discard it so it
-            // does not contaminate the next response.
+            // Such a message carries no __fg_id, so the host's ID check discards it
+            // even if the responseQueue.clear() misses it in a race. Both defences work.
             try (Fixture f = new Fixture()) {
-                // No request in flight — Firefox sends something spontaneously
+                // No request in flight — Firefox sends something spontaneously (no __fg_id).
                 NativeMessaging.write(f.firefoxResponseWriter, "{\"unsolicited\":true}");
                 Thread.sleep(60); // let stdin-reader enqueue it
 
                 String expected = "{\"status\":200,\"body\":\"real\"}";
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                int id = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id));
                 Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -286,7 +301,7 @@ public class NativeHostTest {
         TestRunner.test("firefox disconnects during in-flight request — caller receives error quickly, not after full timeout", () -> {
             try (Fixture f = new Fixture()) {
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
-                NativeMessaging.read(f.hostRequestReader);
+                f.readForwardedId(); // consume so the pipe does not stall
 
                 f.firefoxResponseWriter.close(); // simulate Firefox dying mid-request
 
@@ -348,9 +363,11 @@ public class NativeHostTest {
                 f.sendAsCaller(firstLine + "\n" + secondLine);
 
                 String forwarded = NativeMessaging.read(f.hostRequestReader);
-                Assert.equal(firstLine, forwarded);
+                // The forwarded string has __fg_id injected; strip it and compare to original.
+                Assert.equal(firstLine, Fixture.stripFgId(forwarded));
 
-                NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
+                int id = Fixture.extractFgId(forwarded);
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200}", id));
             }
         });
 
@@ -364,8 +381,8 @@ public class NativeHostTest {
                         String req  = "{\"seq\":" + i + ",\"url\":\"/item/" + i + "\"}";
                         String resp = "{\"status\":200,\"seq\":" + i + "}";
                         out.println(req);
-                        Assert.equal(req, NativeMessaging.read(f.hostRequestReader));
-                        NativeMessaging.write(f.firefoxResponseWriter, resp);
+                        int id = Fixture.extractFgId(NativeMessaging.read(f.hostRequestReader));
+                        NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(resp, id));
                         Assert.equal(resp, in.readLine());
                     }
                 }
@@ -451,7 +468,7 @@ public class NativeHostTest {
                      BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
 
                     out.println("{\"method\":\"GET\",\"url\":\"/first\"}");
-                    NativeMessaging.read(f.hostRequestReader);
+                    f.readForwardedId(); // consume the forwarded request
                     Assert.contains(in.readLine(), "timeout");
 
                     // Host closed the connection — second readLine must return EOF.
@@ -464,8 +481,8 @@ public class NativeHostTest {
                 // Reconnect on a fresh socket: must be served correctly.
                 String expected = "{\"status\":200,\"body\":\"recovered\"}";
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/second\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                int id = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id));
                 Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -498,8 +515,8 @@ public class NativeHostTest {
                 String req      = "{\"method\":\"GET\",\"url\":\"/recovery\"}";
                 String expected = "{\"status\":200,\"body\":\"ok\"}";
                 Future<String> result = f.sendAsCaller(req);
-                Assert.equal(req, NativeMessaging.read(f.hostRequestReader));
-                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                int id = f.readForwardedId(req);
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id));
                 Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -510,26 +527,28 @@ public class NativeHostTest {
             // socket and resume accepting new connections.
             try (Fixture f = new Fixture()) {
                 // Caller connects and sends a request.
-                Socket     s   = new Socket("127.0.0.1", f.host.getBoundPort());
+                Socket      s   = new Socket("127.0.0.1", f.host.getBoundPort());
                 PrintWriter out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
                 out.println("{\"method\":\"GET\",\"url\":\"/slow\"}");
 
                 // Confirm the request was forwarded to Firefox.
-                Assert.notNull(NativeMessaging.read(f.hostRequestReader), "request must be forwarded");
+                String forwarded = NativeMessaging.read(f.hostRequestReader);
+                Assert.notNull(forwarded, "request must be forwarded");
+                int id = Fixture.extractFgId(forwarded);
 
                 // Caller disconnects abruptly while host is blocked in poll().
                 s.close();
 
                 // Firefox now responds — host's println will fail silently (PrintWriter
                 // swallows the broken-pipe error), then in.readLine() returns null → loop exits.
-                NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200}", id));
                 Thread.sleep(150); // let handleCaller finish and accept() resume
 
                 // Host must still accept and serve a new caller.
                 String expected = "{\"status\":201,\"body\":\"next\"}";
                 Future<String> result = f.sendAsCaller("{\"method\":\"POST\",\"url\":\"/next\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                int id2 = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id2));
                 Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
             }
         });
@@ -540,38 +559,36 @@ public class NativeHostTest {
             try (Fixture f = new Fixture()) {
                 for (int i = 0; i < 2; i++) {
                     Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/t" + i + "\"}");
-                    NativeMessaging.read(f.hostRequestReader); // consume forwarded request
+                    f.readForwardedId(); // consume forwarded request; no response written → timeout
                     Assert.contains(result.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS), "timeout");
                 }
                 // After two timeouts on separate connections, a fresh connection succeeds.
                 String expected = "{\"status\":200,\"body\":\"finally\"}";
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/good\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                int id = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id));
                 Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
             }
         });
 
         TestRunner.test("late reply after timeout cannot contaminate next request (no sleep, tight race)", () -> {
-            // Regression test for reply misdelivery. Without the break-after-timeout fix,
-            // the late reply could land in the queue after the next request's clear() and
-            // be returned as that request's response.
-            //
-            // This test deliberately omits Thread.sleep() between the late reply and the
-            // next request to maximise the chance of the race triggering.
+            // Definitive regression test for reply misdelivery. The stale reply carries
+            // the old request's __fg_id; the host discards it by ID mismatch regardless
+            // of timing. No Thread.sleep() between the stale reply and the next request
+            // to maximise the chance of exposing any remaining race.
             try (Fixture f = new Fixture()) {
                 Future<String> result1 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/timeout\"}");
-                NativeMessaging.read(f.hostRequestReader); // consume forwarded request
+                int staleId = f.readForwardedId(); // capture ID of the timed-out request
                 Assert.contains(result1.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS), "timeout");
 
-                // Firefox delivers a late reply immediately after the timeout, with no delay.
-                NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200,\"body\":\"STALE\"}");
+                // Firefox delivers a late reply tagged with the STALE ID — must be discarded.
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200,\"body\":\"STALE\"}", staleId));
 
-                // Next request: must receive its own response, never the stale one.
+                // Next request must receive its own correctly-tagged response, never the stale one.
                 String expected = "{\"status\":201,\"body\":\"correct\"}";
                 Future<String> result2 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/next\"}");
-                NativeMessaging.read(f.hostRequestReader);
-                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                int id2 = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id2));
                 Assert.equal(expected, result2.get(2, TimeUnit.SECONDS));
             }
         });
@@ -647,6 +664,61 @@ public class NativeHostTest {
                     return in.readLine();
                 }
             });
+        }
+
+        /**
+         * Reads one request forwarded to Firefox via the NM pipe.
+         * Returns the __fg_id that the host injected into it.
+         */
+        int readForwardedId() throws IOException {
+            return extractFgId(NativeMessaging.read(hostRequestReader));
+        }
+
+        /**
+         * Reads one request forwarded to Firefox, asserts that its content
+         * (with __fg_id stripped) equals {@code expectedOriginal}, and returns
+         * the __fg_id. Use this to verify that the host preserves caller-supplied
+         * fields while injecting the tracking field.
+         */
+        int readForwardedId(String expectedOriginal) throws IOException {
+            String json = NativeMessaging.read(hostRequestReader);
+            Assert.equal(expectedOriginal, stripFgId(json));
+            return extractFgId(json);
+        }
+
+        /**
+         * Extract the numeric __fg_id value from a JSON string.
+         * Throws if the field is not present.
+         */
+        static int extractFgId(String json) {
+            int idx = json.indexOf("\"__fg_id\":");
+            int start = idx + 10; // length of "\"__fg_id\":"
+            int end = start;
+            while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
+            return Integer.parseInt(json.substring(start, end));
+        }
+
+        /**
+         * Remove the __fg_id tracking field from a JSON string.
+         * Mirrors the logic in NativeHost.stripFgId.
+         */
+        static String stripFgId(String json) {
+            return json.replaceFirst("\"__fg_id\":\\d+,?", "");
+        }
+
+        /**
+         * Wrap a Firefox response JSON with the __fg_id field as the first key,
+         * mimicking what background.js sends back to the native host:
+         *   { __fg_id: N, ...response }
+         *
+         * Examples:
+         *   tagged("{\"status\":200}", 3)  →  {"__fg_id":3,"status":200}
+         *   tagged("{}", 3)                →  {"__fg_id":3}
+         */
+        static String tagged(String responseJson, int fgId) {
+            String field = "\"__fg_id\":" + fgId;
+            if (responseJson.length() <= 2) return "{" + field + "}";
+            return "{" + field + "," + responseJson.substring(1);
         }
 
         private void awaitReady() throws InterruptedException {
