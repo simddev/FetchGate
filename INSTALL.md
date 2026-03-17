@@ -86,12 +86,15 @@ then:
 3. In a terminal:
 
 ```bash
-echo '{"method":"GET","url":"/"}' | timeout 3 nc localhost 9919
+echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919
 ```
 
 You should get back a single JSON line with `status`, `headers`, and `body`.
 `timeout 3` is needed because the host keeps connections open for persistent
 callers — without it, `nc` hangs waiting for more data after the response.
+`/robots.txt` is a safe first test — it is always small. Avoid using `"url":"/"`
+as the initial test: many homepages exceed the 1 MB Native Messaging size limit
+and will return an error even on a perfectly healthy setup.
 
 ---
 
