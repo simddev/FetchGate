@@ -145,8 +145,16 @@ public class NativeHost {
             responseQueue.clear();
 
             // Forward the request to the extension via Native Messaging.
-            synchronized (nativeOut) {
-                NativeMessaging.write(nativeOut, request);
+            // Catch write failures (oversized request, broken pipe) and return a
+            // proper error JSON to the caller rather than silently closing the socket.
+            try {
+                synchronized (nativeOut) {
+                    NativeMessaging.write(nativeOut, request);
+                }
+            } catch (IOException e) {
+                log("Failed to forward request: " + e.getMessage());
+                out.println("{\"error\":\"failed to forward to extension: " + e.getMessage() + "\"}");
+                return;
             }
             log("→ Firefox: " + request);
 
