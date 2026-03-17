@@ -29,28 +29,30 @@ async function executeFetch(spec) {
 
         const body = await response.text();
 
-        // Firefox's Native Messaging protocol caps messages at 1 MB. A response
-        // body that is too large would cause Firefox to close the port when
-        // background.js tries to postMessage it to the native host, which the
-        // host surfaces as "connection to Firefox was closed". Reject early with
-        // a clear error instead of silently breaking the connection.
-        // TextEncoder gives the actual UTF-8 byte count — body.length would
-        // undercount multi-byte characters (e.g. CJK chars are 1 JS char but
-        // 3 UTF-8 bytes, so a 900 000-char CJK page encodes to ~2.7 MB).
-        // 800 000 bytes leaves ~248 KB headroom for status, headers, and JSON
-        // escaping overhead before hitting the 1 MB wire limit.
-        const BODY_LIMIT_BYTES = 800_000;
-        const bodyBytes = new TextEncoder().encode(body).byteLength;
-        if (bodyBytes > BODY_LIMIT_BYTES) {
-            return { error: `response body too large (${bodyBytes} bytes; Native Messaging limit is ~800 KB)` };
-        }
-
-        return {
+        const reply = {
             status:     response.status,
             statusText: response.statusText,
             headers,
             body,
         };
+
+        // Firefox's Native Messaging protocol caps messages at 1 MB. A reply
+        // that is too large would cause Firefox to silently close the port when
+        // background.js tries to postMessage it to the native host. Reject early
+        // with a clear error instead. Measure the full serialised reply — not
+        // just the body — because headers, status fields, and JSON escaping of
+        // quote/backslash-heavy bodies all contribute to the final wire size.
+        // TextEncoder gives true UTF-8 byte count; string .length undercounts
+        // multi-byte characters (e.g. one CJK char = 3 UTF-8 bytes).
+        // background.js adds ~20 bytes of __fg_id envelope on top, so
+        // 1 000 000 bytes is a safe ceiling with ample headroom.
+        const NM_LIMIT_BYTES = 1_000_000;
+        const replyBytes = new TextEncoder().encode(JSON.stringify(reply)).byteLength;
+        if (replyBytes > NM_LIMIT_BYTES) {
+            return { error: `response too large (${replyBytes} bytes serialized; Native Messaging limit is 1 MB)` };
+        }
+
+        return reply;
     } catch (e) {
         return { error: e.message };
     }

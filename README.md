@@ -187,11 +187,14 @@ Full step-by-step instructions for both hosts are in **[INSTALL.md](INSTALL.md)*
 3. From any terminal or program, send a JSON line to `localhost:9919`:
 
 ```bash
-echo '{"method":"GET","url":"/"}' | timeout 3 nc localhost 9919
+echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919
 ```
 
 `timeout 3` is needed because the host keeps connections open for persistent
 callers — without it `nc` would hang after receiving the response.
+`/robots.txt` is a safe test endpoint — it is always small. Avoid `"url":"/"`:
+many homepages exceed the 1 MB Native Messaging size limit and will return an
+error even on a healthy setup.
 
 ### Python host
 
@@ -294,12 +297,13 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   persistent `.xpi` install option, which requires a Firefox variant that
   allows unsigned extensions.
 
-- **Response body capped at ~800 KB.** Firefox's Native Messaging protocol
-  limits individual messages to 1 MB. The content script measures the response
-  body in UTF-8 bytes and returns `{"error":"response body too large ..."}` if
-  it exceeds ~800 KB, keeping headroom for headers and JSON encoding overhead.
-  API responses are typically well under this limit; full HTML pages of
-  content-heavy sites (e.g. YouTube) often exceed it.
+- **Response capped at ~1 MB serialized.** Firefox's Native Messaging protocol
+  limits individual messages to 1 MB. The content script measures the full
+  serialized reply (status + headers + body, in UTF-8 JSON bytes) and returns
+  `{"error":"response too large ..."}` if it exceeds 1 000 000 bytes, keeping
+  a small margin for the envelope added by `background.js`. API responses are
+  typically well under this limit; full HTML pages of content-heavy sites
+  (e.g. YouTube) often exceed it.
 
 - **Cross-origin requests require explicit credentials opt-in.** The default
   `fetch()` credentials mode is `"same-origin"`, meaning cookies and auth
