@@ -283,16 +283,22 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("firefox disconnects during in-flight request — caller receives error, not a hang", () -> {
+        TestRunner.test("firefox disconnects during in-flight request — caller receives error quickly, not after full timeout", () -> {
             try (Fixture f = new Fixture()) {
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
                 NativeMessaging.read(f.hostRequestReader);
 
                 f.firefoxResponseWriter.close(); // simulate Firefox dying mid-request
 
+                long start = System.currentTimeMillis();
                 String reply = result.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS);
+                long elapsed = System.currentTimeMillis() - start;
+
                 Assert.notNull(reply, "caller must receive a response, not hang indefinitely");
                 Assert.contains(reply, "error");
+                // Sentinel unblocks the poll immediately — should arrive well before the full timeout
+                Assert.isTrue(elapsed < TEST_TIMEOUT_MS / 2,
+                        "expected fast error via sentinel, but got delay of " + elapsed + " ms");
             }
         });
 
@@ -348,23 +354,20 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("one request per connection — server closes socket after responding", () -> {
+        TestRunner.test("persistent connection: multiple requests on the same socket", () -> {
             try (Fixture f = new Fixture()) {
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
                      PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
                      BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
 
-                    out.println("{\"method\":\"GET\",\"url\":\"/\"}");
-                    Assert.equal("{\"method\":\"GET\",\"url\":\"/\"}", NativeMessaging.read(f.hostRequestReader));
-                    NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
-
-                    Assert.equal("{\"status\":200}", in.readLine());
-
-                    // Server closes the connection after responding
-                    s.setSoTimeout(500);
-                    try {
-                        Assert.isNull(in.readLine(), "expected EOF after server closes connection");
-                    } catch (SocketTimeoutException e) { /* acceptable */ }
+                    for (int i = 0; i < 3; i++) {
+                        String req  = "{\"seq\":" + i + ",\"url\":\"/item/" + i + "\"}";
+                        String resp = "{\"status\":200,\"seq\":" + i + "}";
+                        out.println(req);
+                        Assert.equal(req, NativeMessaging.read(f.hostRequestReader));
+                        NativeMessaging.write(f.firefoxResponseWriter, resp);
+                        Assert.equal(resp, in.readLine());
+                    }
                 }
             }
         });
