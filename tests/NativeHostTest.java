@@ -745,6 +745,23 @@ public class NativeHostTest {
             }
         });
 
+        TestRunner.test("request with control characters in value is preserved through the envelope", () -> {
+            // jsonStringEncode encodes control chars (< 0x20) as \\uXXXX (unicode escape form).
+            // extractReqField must decode them back to the original characters so
+            // readForwardedId(expectedOriginal) can verify the round-trip.
+            // U+0001 (SOH) and U+000C (form-feed) exercise different code paths.
+            try (Fixture f = new Fixture()) {
+                // Build the request in-code so the literal control chars appear in the string.
+                String request = "{\"url\":\"/\",\"body\":\"a\u0001b\u000cc\"}";
+                String response = "{\"status\":200}";
+
+                Future<String> result = f.sendAsCaller(request);
+                int id = f.readForwardedId(request); // decodes \u0001 and \u000c via extractReqField
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
         TestRunner.test("empty JSON object {} is forwarded and response returned correctly", () -> {
             // {} passes startsWith/endsWith validation. buildEnvelope wraps it as
             // {"__fg_id":N,"req":"{}"}, which background.js can parse and dispatch.
@@ -881,9 +898,19 @@ public class NativeHostTest {
                     switch (next) {
                         case '"':  sb.append('"');  break;
                         case '\\': sb.append('\\'); break;
+                        case 'b':  sb.append('\b'); break;
+                        case 'f':  sb.append('\f'); break;
                         case 'n':  sb.append('\n'); break;
                         case 'r':  sb.append('\r'); break;
                         case 't':  sb.append('\t'); break;
+                        case 'u':
+                            // unicode escape: four hex digits follow
+                            if (i + 4 < envelope.length()) {
+                                String hex = envelope.substring(i + 1, i + 5);
+                                sb.append((char) Integer.parseInt(hex, 16));
+                                i += 4;
+                            }
+                            break;
                         default:   sb.append('\\'); sb.append(next); break;
                     }
                 } else if (c == '"') {
