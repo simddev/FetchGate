@@ -14,8 +14,8 @@ if (!window.__fetchGateInstalled) {
 async function executeFetch(spec) {
     try {
         const init = { method: spec.method || 'GET' };
-        if (spec.headers) init.headers = spec.headers;
-        if (spec.body)    init.body    = spec.body;
+        if (spec.headers  != null) init.headers = spec.headers;
+        if (spec.body     != null) init.body    = spec.body;
 
         const response = await fetch(spec.url, init);
 

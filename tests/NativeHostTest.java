@@ -527,6 +527,56 @@ public class NativeHostTest {
                 Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
             }
         });
+
+        TestRunner.test("two consecutive timeouts on persistent connection: each request times out independently", () -> {
+            // Each iteration of the handleCaller loop must manage its own timeout
+            // independently. Two back-to-back timeouts followed by a successful request
+            // must all work correctly on the same TCP connection.
+            try (Fixture f = new Fixture()) {
+                try (Socket         s   = new Socket("127.0.0.1", f.host.getBoundPort());
+                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+
+                    // First timeout.
+                    out.println("{\"method\":\"GET\",\"url\":\"/t1\"}");
+                    NativeMessaging.read(f.hostRequestReader); // consume forwarded request
+                    Assert.contains(in.readLine(), "timeout");
+
+                    // Second timeout — Firefox is still silent.
+                    out.println("{\"method\":\"GET\",\"url\":\"/t2\"}");
+                    NativeMessaging.read(f.hostRequestReader);
+                    Assert.contains(in.readLine(), "timeout");
+
+                    // Third request — Firefox responds normally.
+                    String expected = "{\"status\":200,\"body\":\"finally\"}";
+                    out.println("{\"method\":\"GET\",\"url\":\"/t3\"}");
+                    NativeMessaging.read(f.hostRequestReader);
+                    NativeMessaging.write(f.firefoxResponseWriter, expected);
+                    Assert.equal(expected, in.readLine());
+                }
+            }
+        });
+
+        TestRunner.test("firefox EOF closes the TCP server — no new connections accepted", () -> {
+            // When the Native Messaging pipe reaches EOF, stdin-reader calls stop().
+            // The TCP server socket must close, refusing further connections.
+            try (Fixture f = new Fixture()) {
+                int port = f.host.getBoundPort();
+
+                // Simulate Firefox closing the NM connection.
+                f.firefoxResponseWriter.close();
+
+                // Give stdin-reader time to detect EOF and call stop().
+                Thread.sleep(200);
+
+                try {
+                    new Socket("127.0.0.1", port).close();
+                    throw new AssertionError("expected connection refused after Firefox EOF");
+                } catch (ConnectException e) {
+                    // expected — server socket was closed by stop()
+                }
+            }
+        });
     }
 
     // ── Fixture ───────────────────────────────────────────────────────────────

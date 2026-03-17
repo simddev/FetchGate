@@ -159,7 +159,7 @@ public class NativeHost {
                         NativeMessaging.write(nativeOut, request);
                     }
                 } catch (IOException e) {
-                    log("Failed to forward request: " + e.getMessage());
+                    log("Failed to forward request: " + e);
                     out.println("{\"error\":\"failed to forward to extension: " + e.getMessage() + "\"}");
                     break; // can't forward any more requests; close this connection
                 }
