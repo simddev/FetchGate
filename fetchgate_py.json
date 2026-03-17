@@ -1,0 +1,7 @@
+{
+  "name": "fetchgate",
+  "description": "FetchGate Python native host — your Python script runs directly as the native host.",
+  "path": "/REPLACE/WITH/ABSOLUTE/PATH/TO/your_script.py",
+  "type": "stdio",
+  "allowed_extensions": ["fetchgate@localhost"]
+}

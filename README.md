@@ -23,13 +23,18 @@ but no API, or whose API access is blocked to third-party HTTP clients.
 
 ## Architecture
 
+Two native host implementations are provided. Both speak the same protocol to
+the extension; the extension code is identical in both cases.
+
+### Java host (TCP bridge)
+
 ```
-External Caller (Java / Python)
+External Caller (any language)
     │
     │  newline-delimited JSON over TCP (localhost:9919)
     │
     ▼
-Native Host  (Java)
+Native Host  (Java — src/)
     │
     │  Firefox Native Messaging — 4-byte LE length-prefixed JSON over stdin/stdout
     │
@@ -44,7 +49,28 @@ Content Script  (content_script.js)
     — returns response to background → native host → caller
 ```
 
-**IPC in detail:**
+The Java host runs as a persistent TCP server. Any language can reach it via
+`localhost:9919` without knowing anything about the Native Messaging protocol.
+
+### Python host (direct)
+
+```
+Your Python script  (host_py/)
+    │
+    │  Firefox Native Messaging — stdin/stdout  (your script IS the native host)
+    │
+    ▼
+Background Script  (background.js)
+    │  browser.tabs.sendMessage()
+    ▼
+Content Script  (content_script.js)
+```
+
+Firefox launches your Python script directly when you arm a tab. The script
+imports `fetchgate.py`, calls `fg.fetch()`, and exits when done. No TCP server,
+no Java. Arming the tab IS the trigger that starts the script.
+
+**IPC in detail (Java host):**
 
 - *Caller ↔ Native Host* — plain TCP on `localhost:9919`. One JSON object per
   line (newline-delimited). Persistent connections are supported (multiple
@@ -124,25 +150,35 @@ On error, the response is `{ "error": "..." }`.
 
 - GNU/Linux
 - Firefox or LibreWolf
-- JDK 21+
+- **Java host:** JDK 21+
+- **Python host:** Python 3.6+
 
 ## Installation
 
 See **[INSTALL.md](INSTALL.md)** for the full step-by-step setup.
 
-In short:
+See **[INSTALL.md](INSTALL.md)** for full setup instructions for both hosts.
 
-1. Compile the Java source: `javac -d out src/*.java`
-2. Create a `fetchgate.sh` launcher script pointing at the compiled classes
-3. Copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/` and set the
-   `path` field to your launcher script
-4. Load the extension via `about:debugging → Load Temporary Add-on → extension/manifest.json`
+**Java host (short version):**
+
+1. Compile: `javac -d out src/*.java`
+2. Create `fetchgate.sh` launcher; copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/` with the correct path
+3. Load the extension via `about:debugging`
+
+**Python host (short version):**
+
+1. Write your script importing `host_py/fetchgate.py`; make it executable
+2. Copy `fetchgate_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json` with the correct path
+3. Load the extension via `about:debugging`
 
 ## Usage
 
-1. Navigate to a site you are logged into
-2. Click the **FetchGate** toolbar button — the badge turns green **ON**
-3. Connect a caller to `localhost:9919` and send a JSON request line
+### Java host
+
+1. Start the Java host (it will be launched by Firefox automatically on arm)
+2. Navigate to a site you are logged into
+3. Click the **FetchGate** toolbar button — badge turns green **ON**
+4. Connect a caller to `localhost:9919` and send a JSON request line
 
 Quick test with netcat:
 
@@ -150,10 +186,23 @@ Quick test with netcat:
 echo '{"method":"GET","url":"/"}' | timeout 3 nc localhost 9919
 ```
 
-You should receive a single JSON line with `status`, `headers`, and `body`.
 `timeout 3` is needed because the host keeps the connection open for persistent
-callers — without it `nc` hangs waiting for more data after receiving the
-response.
+callers — without it `nc` hangs waiting for more data after the response.
+
+### Python host
+
+1. Write your Python script (see `host_py/example.py`)
+2. Navigate to the target site
+3. Click the **FetchGate** toolbar button — Firefox launches your script immediately
+4. The script runs to completion; the badge shows ERR when it exits (normal)
+
+```python
+from fetchgate import FetchGate
+
+fg = FetchGate()
+resp = fg.fetch({"method": "GET", "url": "/api/data"})
+print(resp["body"])
+```
 
 ## Building and testing
 
@@ -240,12 +289,16 @@ infrastructure.
 ## Project structure
 
 ```
-src/                    Java native host
+src/                    Java native host (TCP bridge)
   Main.java             Entry point; stdout redirect to protect the NM channel
   NativeMessaging.java  Firefox Native Messaging framing (length-prefixed JSON)
   NativeHost.java       TCP server + stdin-reader thread + request lifecycle
 
-extension/              WebExtension
+host_py/                Python native host (direct, no TCP)
+  fetchgate.py          NM client library — import this in your script
+  example.py            Ready-to-run example script
+
+extension/              WebExtension (shared by both hosts)
   manifest.json         MV2 manifest; extension ID: fetchgate@localhost
   background.js         Armed-tab state, connectNative(), message routing
   content_script.js     Executes fetch() in tab context, returns response
@@ -256,7 +309,8 @@ tests/                  Test suite (plain Java, no framework)
   NativeMessagingTest.java
   NativeHostTest.java
 
-fetchgate.json          Native messaging manifest template
+fetchgate.json          NM manifest template — Java host
+fetchgate_py.json       NM manifest template — Python host
 INSTALL.md              Step-by-step installation instructions
 ```
 
