@@ -31,7 +31,14 @@ bin/
 test/
 FetchGate.iml
 
+### IntelliJ user-specific ###
+.idea/workspace.xml
+
+### Compiled output ###
+*.class
+
 ### Project-specific ###
+Structure.txt
 fetchgate.txt
 fetchgate_slop_annotated.pdf
 devlog.md
