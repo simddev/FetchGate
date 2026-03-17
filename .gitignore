@@ -37,6 +37,10 @@ FetchGate.iml
 ### Compiled output ###
 *.class
 
+### Python ###
+__pycache__/
+*.pyc
+
 ### Project-specific ###
 Structure.txt
 devlog.md

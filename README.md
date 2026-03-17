@@ -339,6 +339,7 @@ src/                    Java native host (TCP bridge)
 host_py/                Python native host (direct — no TCP)
   fetchgate.py          Native Messaging library; import this in your script
   example.py            Working example script to copy and customise
+  test_fetchgate.py     Python test suite (26 tests, no external framework)
 
 extension/              WebExtension — shared by both hosts, never changes
   manifest.json         MV2 manifest; extension ID: fetchgate@localhost
