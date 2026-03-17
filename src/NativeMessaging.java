@@ -1,6 +1,7 @@
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Implements the Firefox Native Messaging framing protocol.
@@ -34,7 +35,7 @@ public class NativeMessaging {
         if (len > MAX_MESSAGE_BYTES) return null; // malformed: exceeds Firefox's 1 MB hard cap
         byte[] payload = in.readNBytes(len);
         if (payload.length < len) return null;  // EOF mid-payload (truncated stream)
-        return new String(payload, "UTF-8");
+        return new String(payload, StandardCharsets.UTF_8);
     }
 
     /**
@@ -44,7 +45,7 @@ public class NativeMessaging {
      * is shared across threads.
      */
     public static void write(OutputStream out, String json) throws IOException {
-        byte[] payload = json.getBytes("UTF-8");
+        byte[] payload = json.getBytes(StandardCharsets.UTF_8);
         if (payload.length > MAX_MESSAGE_BYTES) {
             throw new IOException("message too large: " + payload.length
                     + " bytes (Firefox limit: " + MAX_MESSAGE_BYTES + ")");
