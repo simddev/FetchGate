@@ -17,7 +17,8 @@
   },
 
   "browser_action": {
-    "default_title": "FetchGate — click to arm/disarm this tab"
+    "default_title": "FetchGate — click to arm/disarm this tab",
+    "default_icon": "icon.svg"
   },
 
   "browser_specific_settings": {
