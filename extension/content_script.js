@@ -27,11 +27,25 @@ async function executeFetch(spec) {
         const headers = {};
         response.headers.forEach((value, name) => { headers[name] = value; });
 
+        const body = await response.text();
+
+        // Firefox's Native Messaging protocol caps messages at 1 MB. A response
+        // body that is too large would cause Firefox to close the port when
+        // background.js tries to postMessage it to the native host, which the
+        // host surfaces as "connection to Firefox was closed". Reject early with
+        // a clear error instead of silently breaking the connection.
+        // 900 000 chars leaves ~100 KB headroom for status, headers, and JSON
+        // escaping overhead before hitting the 1 MB wire limit.
+        const BODY_LIMIT = 900_000;
+        if (body.length > BODY_LIMIT) {
+            return { error: `response body too large (${body.length} chars; Native Messaging limit is ~900 KB)` };
+        }
+
         return {
             status:     response.status,
             statusText: response.statusText,
             headers,
-            body:       await response.text(),
+            body,
         };
     } catch (e) {
         return { error: e.message };
