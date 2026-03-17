@@ -93,11 +93,12 @@ Firefox — use Firefox Developer Edition, Firefox Nightly, or LibreWolf.
 3. From a terminal, send a test request with netcat:
 
 ```bash
-echo '{"method":"GET","url":"/"}' | nc localhost 9919
+echo '{"method":"GET","url":"/"}' | timeout 3 nc localhost 9919
 ```
 
 You should receive a single line of JSON back containing `status`, `headers`,
-and `body`.
+and `body`. `timeout 3` terminates `nc` after the response arrives — the host
+keeps the connection open for persistent callers, so plain `nc` would hang.
 
 If nothing comes back within 30 seconds, open the Firefox browser console
 (`about:debugging` → Inspect on FetchGate) to see background script log output.
