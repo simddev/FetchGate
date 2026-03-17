@@ -15,8 +15,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Threading model:
  *
  *   Main thread      — accepts TCP connections; handles them one at a time.
- *                      Sequential handling is intentional for the PoC: it keeps
- *                      the response-routing logic trivial (no per-request IDs needed).
+ *                      Sequential handling is intentional: only one request is
+ *                      in flight to Firefox at any given time. Per-request IDs
+ *                      (envelope __fg_id) guard against stale late replies.
  *
  *   stdin-reader     — daemon thread; reads NM frames from Firefox continuously
  *                      and drops them onto responseQueue.
@@ -46,6 +47,11 @@ public class NativeHost {
     // Monotonically increasing counter. Each outbound request gets a unique ID so the
     // host can detect and discard stale responses left over from timed-out requests.
     private final AtomicInteger requestCounter = new AtomicInteger(0);
+
+    // Cleared by stdin-reader when Firefox disconnects (EOF or read error).
+    // handleCaller checks this before clearing the queue and before writing,
+    // to avoid consuming the SHUTDOWN_SENTINEL prematurely on persistent connections.
+    private volatile boolean firefoxAlive = true;
 
     // Set once the ServerSocket is bound; lets tests discover the OS-assigned port.
     private volatile int          boundPort    = -1;
@@ -117,6 +123,7 @@ public class NativeHost {
                     String msg = NativeMessaging.read(nativeIn);
                     if (msg == null) {
                         log("Native Messaging connection closed by Firefox — shutting down.");
+                        firefoxAlive = false;
                         responseQueue.offer(SHUTDOWN_SENTINEL); // unblock any waiting caller immediately
                         stop(); // closes the server socket, breaking the accept() loop
                         return;
@@ -126,6 +133,7 @@ public class NativeHost {
                 }
             } catch (Exception e) {
                 log("stdin-reader fatal error: " + e);
+                firefoxAlive = false;
                 responseQueue.offer(SHUTDOWN_SENTINEL); // unblock any waiting caller immediately
                 stop();
             }
@@ -166,6 +174,15 @@ public class NativeHost {
                 }
 
                 log("← Caller: " + truncate(request));
+
+                // Fast-fail if Firefox has already disconnected: skip the queue
+                // clear (which would consume the SHUTDOWN_SENTINEL) and return
+                // an error immediately instead of waiting for the full timeout.
+                if (!firefoxAlive) {
+                    log("Firefox already disconnected — returning error to caller");
+                    out.println("{\"error\":\"connection to Firefox was closed\"}");
+                    break;
+                }
 
                 // Discard any stale response left in the queue from a previous
                 // timed-out request that arrived late.
