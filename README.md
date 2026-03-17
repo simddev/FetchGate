@@ -1,0 +1,181 @@
+# FetchGate
+
+A Firefox/LibreWolf WebExtension that lets an external process execute
+authenticated `fetch()` calls through a live browser tab.
+
+## What it does
+
+When you are logged into a website, the browser holds session state (cookies,
+tokens, TLS client certificates) that is not directly accessible to an external
+program. FetchGate bridges that gap: a Java or Python program sends a request
+spec to a local TCP port, the extension executes the corresponding `fetch()`
+inside the active tab, and returns the full HTTP response — status, headers,
+and body — to the caller.
+
+The fetch runs in the tab's JavaScript context, so it inherits everything the
+browser already has for that site: cookies, session tokens, CORS policy. No
+credentials need to be extracted or replayed.
+
+**Target use case:** extracting your own data from websites that have accounts
+but no API, or whose API access is blocked to third-party HTTP clients.
+
+**Platform:** GNU/Linux only.
+
+## Architecture
+
+```
+External Caller (Java / Python)
+    │
+    │  newline-delimited JSON over TCP (localhost:9919)
+    │
+    ▼
+Native Host  (Java)
+    │
+    │  Firefox Native Messaging — 4-byte LE length-prefixed JSON over stdin/stdout
+    │
+    ▼
+Background Script  (background.js)
+    │
+    │  browser.tabs.sendMessage()
+    │
+    ▼
+Content Script  (content_script.js)
+    — runs fetch() inside the tab, inherits session state
+    — returns response to background → native host → caller
+```
+
+**IPC in detail:**
+
+- *Caller ↔ Native Host* — plain TCP on `localhost:9919`. One JSON object per
+  line (newline-delimited). One request per connection; the host closes the
+  socket after replying.
+
+- *Native Host ↔ Extension* — [Firefox Native Messaging][nm]: each message is
+  a 4-byte little-endian unsigned integer (payload length) followed by a UTF-8
+  JSON payload. Firefox launches the native host process on demand when the
+  extension calls `browser.runtime.connectNative('fetchgate')`.
+
+- *Background ↔ Content Script* — `browser.tabs.sendMessage()` / `sendResponse`
+  within the browser process.
+
+**Design constraint:** the extension code is intentionally minimal and dumb.
+No validation logic lives in JavaScript. All of that belongs in the Java host
+or the caller.
+
+## Message format
+
+**Request** (caller → host → extension):
+
+```json
+{ "method": "GET", "url": "/api/v2/user/profile", "headers": {"Accept": "application/json"} }
+```
+
+| Field     | Required | Description                                             |
+|-----------|----------|---------------------------------------------------------|
+| `url`     | yes      | Absolute URL or path relative to the current tab origin |
+| `method`  | no       | HTTP method; defaults to `GET`                          |
+| `headers` | no       | Object of additional request headers                    |
+| `body`    | no       | Request body (for POST/PUT)                             |
+
+**Response** (extension → host → caller):
+
+```json
+{ "status": 200, "statusText": "OK", "headers": {"content-type": "application/json"}, "body": "..." }
+```
+
+The `body` field is always a string. Parse it based on `content-type`.
+On error, the response is `{ "error": "..." }`.
+
+## Requirements
+
+- GNU/Linux
+- Firefox or LibreWolf
+- JDK 21+
+
+## Installation
+
+See **[INSTALL.md](INSTALL.md)** for the full step-by-step setup.
+
+In short:
+
+1. Compile the Java source: `javac -d out src/*.java`
+2. Create a `fetchgate.sh` launcher script pointing at the compiled classes
+3. Copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/` and set the
+   `path` field to your launcher script
+4. Load the extension via `about:debugging → Load Temporary Add-on → extension/manifest.json`
+
+## Usage
+
+1. Navigate to a site you are logged into
+2. Click the **FetchGate** toolbar button — the badge turns green **ON**
+3. Connect a caller to `localhost:9919` and send a JSON request line
+
+Quick test with netcat:
+
+```bash
+echo '{"method":"GET","url":"/"}' | nc localhost 9919
+```
+
+You should receive a single JSON line with `status`, `headers`, and `body`.
+
+## Building and testing
+
+```bash
+# Compile
+javac -d out src/*.java
+
+# Run the test suite (37 tests, no external dependencies)
+javac -d out src/*.java tests/*.java
+java  -cp out TestRunner
+```
+
+## Known limitations
+
+- **One request per connection.** The host closes the TCP socket after each
+  response. Callers must open a new connection per request.
+
+- **Single-line JSON only.** The caller-side TCP protocol is newline-delimited.
+  Sending pretty-printed (multi-line) JSON will cause silent truncation at the
+  first newline. Always send compact, single-line JSON.
+
+- **One armed tab at a time.** The background script tracks a single armed tab.
+  Arming a second tab automatically disarms the first.
+
+- **Extension reloads on browser restart.** Temporary add-ons (loaded via
+  `about:debugging`) are not persisted across Firefox restarts.
+
+- **30-second request timeout.** If the extension does not respond within 30 s
+  the host returns `{"error":"timeout: ..."}` to the caller.
+
+- **Firefox disconnects during a request.** If the native host connection is lost
+  while a request is in-flight, the caller will wait out the full 30-second
+  timeout before receiving the error response.
+
+## Project structure
+
+```
+src/                    Java native host
+  Main.java             Entry point; stdout redirect to protect the NM channel
+  NativeMessaging.java  Firefox Native Messaging framing (length-prefixed JSON)
+  NativeHost.java       TCP server + stdin-reader thread + request lifecycle
+
+extension/              WebExtension
+  manifest.json         MV2 manifest; extension ID: fetchgate@localhost
+  background.js         Armed-tab state, connectNative(), message routing
+  content_script.js     Executes fetch() in tab context, returns response
+
+tests/                  Test suite (plain Java, no framework)
+  TestRunner.java       Test runner and harness
+  Assert.java           Assertion helpers
+  NativeMessagingTest.java
+  NativeHostTest.java
+
+fetchgate.json          Native messaging manifest template
+INSTALL.md              Step-by-step installation instructions
+```
+
+## License
+
+GNU General Public License v3 — see [LICENSE](LICENSE).
+
+[nm]: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging
