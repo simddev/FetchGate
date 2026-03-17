@@ -18,7 +18,11 @@ async function executeFetch(spec) {
         if (spec.body        != null) init.body        = spec.body;
         if (spec.credentials != null) init.credentials = spec.credentials;
 
-        const response = await fetch(spec.url, init);
+        // Resolve relative URLs against the current page origin.
+        // Firefox's fetch() in a content script context does not do this
+        // automatically — passing "/" directly throws "/ is not a valid URL."
+        const url = new URL(spec.url, location.href).href;
+        const response = await fetch(url, init);
 
         const headers = {};
         response.headers.forEach((value, name) => { headers[name] = value; });
