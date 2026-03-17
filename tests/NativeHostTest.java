@@ -440,27 +440,33 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("timeout on persistent connection: next request on same socket succeeds", () -> {
-            // After a timed-out request, the connection stays open and a subsequent
-            // request on the same TCP socket must be served correctly.
+        TestRunner.test("timeout closes TCP connection — reconnect and retry succeeds", () -> {
+            // After a timeout the host breaks the connection so a stale late reply
+            // cannot be consumed by the next request. The caller must reconnect;
+            // the reconnected request must be served correctly.
             try (Fixture f = new Fixture()) {
+                // First connection: request times out → connection is closed by host.
                 try (Socket         s   = new Socket("127.0.0.1", f.host.getBoundPort());
                      PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
                      BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
 
-                    // First request: Firefox doesn't respond → timeout error.
                     out.println("{\"method\":\"GET\",\"url\":\"/first\"}");
-                    NativeMessaging.read(f.hostRequestReader); // consume forwarded request
-                    String timedOut = in.readLine();
-                    Assert.contains(timedOut, "timeout");
-
-                    // Second request on the same socket: Firefox responds normally.
-                    String expected = "{\"status\":200,\"body\":\"recovered\"}";
-                    out.println("{\"method\":\"GET\",\"url\":\"/second\"}");
                     NativeMessaging.read(f.hostRequestReader);
-                    NativeMessaging.write(f.firefoxResponseWriter, expected);
-                    Assert.equal(expected, in.readLine());
+                    Assert.contains(in.readLine(), "timeout");
+
+                    // Host closed the connection — second readLine must return EOF.
+                    s.setSoTimeout(500);
+                    try {
+                        Assert.isNull(in.readLine(), "expected EOF after timeout closes connection");
+                    } catch (SocketTimeoutException e) { /* also acceptable */ }
                 }
+
+                // Reconnect on a fresh socket: must be served correctly.
+                String expected = "{\"status\":200,\"body\":\"recovered\"}";
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/second\"}");
+                NativeMessaging.read(f.hostRequestReader);
+                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
             }
         });
 
@@ -528,32 +534,45 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("two consecutive timeouts on persistent connection: each request times out independently", () -> {
-            // Each iteration of the handleCaller loop must manage its own timeout
-            // independently. Two back-to-back timeouts followed by a successful request
-            // must all work correctly on the same TCP connection.
+        TestRunner.test("two consecutive timeouts each close their connection; host keeps accepting", () -> {
+            // Each timeout causes the host to close that TCP connection. The host must
+            // resume accepting after each, and a subsequent successful request must work.
             try (Fixture f = new Fixture()) {
-                try (Socket         s   = new Socket("127.0.0.1", f.host.getBoundPort());
-                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
-                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
-
-                    // First timeout.
-                    out.println("{\"method\":\"GET\",\"url\":\"/t1\"}");
+                for (int i = 0; i < 2; i++) {
+                    Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/t" + i + "\"}");
                     NativeMessaging.read(f.hostRequestReader); // consume forwarded request
-                    Assert.contains(in.readLine(), "timeout");
-
-                    // Second timeout — Firefox is still silent.
-                    out.println("{\"method\":\"GET\",\"url\":\"/t2\"}");
-                    NativeMessaging.read(f.hostRequestReader);
-                    Assert.contains(in.readLine(), "timeout");
-
-                    // Third request — Firefox responds normally.
-                    String expected = "{\"status\":200,\"body\":\"finally\"}";
-                    out.println("{\"method\":\"GET\",\"url\":\"/t3\"}");
-                    NativeMessaging.read(f.hostRequestReader);
-                    NativeMessaging.write(f.firefoxResponseWriter, expected);
-                    Assert.equal(expected, in.readLine());
+                    Assert.contains(result.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS), "timeout");
                 }
+                // After two timeouts on separate connections, a fresh connection succeeds.
+                String expected = "{\"status\":200,\"body\":\"finally\"}";
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/good\"}");
+                NativeMessaging.read(f.hostRequestReader);
+                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("late reply after timeout cannot contaminate next request (no sleep, tight race)", () -> {
+            // Regression test for reply misdelivery. Without the break-after-timeout fix,
+            // the late reply could land in the queue after the next request's clear() and
+            // be returned as that request's response.
+            //
+            // This test deliberately omits Thread.sleep() between the late reply and the
+            // next request to maximise the chance of the race triggering.
+            try (Fixture f = new Fixture()) {
+                Future<String> result1 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/timeout\"}");
+                NativeMessaging.read(f.hostRequestReader); // consume forwarded request
+                Assert.contains(result1.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS), "timeout");
+
+                // Firefox delivers a late reply immediately after the timeout, with no delay.
+                NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200,\"body\":\"STALE\"}");
+
+                // Next request: must receive its own response, never the stale one.
+                String expected = "{\"status\":201,\"body\":\"correct\"}";
+                Future<String> result2 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/next\"}");
+                NativeMessaging.read(f.hostRequestReader);
+                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                Assert.equal(expected, result2.get(2, TimeUnit.SECONDS));
             }
         });
 

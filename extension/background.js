@@ -20,6 +20,11 @@ function connect() {
         console.log('[FetchGate] Native host disconnected.',
                     err ? err.message : '');
         port = null;
+        // Show an error badge so the user knows the host is gone while the tab is armed.
+        if (armedTabId !== null) {
+            browser.browserAction.setBadgeText({ text: 'ERR', tabId: armedTabId });
+            browser.browserAction.setBadgeBackgroundColor({ color: '#cc0000', tabId: armedTabId });
+        }
     });
 
     console.log('[FetchGate] Connected to native host.');
@@ -63,14 +68,19 @@ browser.browserAction.onClicked.addListener(async (tab) => {
 });
 
 async function arm(tabId) {
+    // Inject first: only mark the tab armed if injection actually succeeds.
+    // On privileged pages (about:*, browser settings) executeScript throws —
+    // proceeding would leave a green badge on a tab that cannot serve requests.
+    try {
+        await browser.tabs.executeScript(tabId, { file: 'content_script.js' });
+    } catch (e) {
+        console.error('[FetchGate] Script injection failed:', e.message);
+        return; // leave badge unchanged; tab is not armed
+    }
+
     armedTabId = tabId;
     browser.browserAction.setBadgeText({ text: 'ON', tabId });
     browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
-
-    // Inject the content script.  The guard in content_script.js makes
-    // re-injection after navigation harmless.
-    await browser.tabs.executeScript(tabId, { file: 'content_script.js' })
-                 .catch(e => console.error('[FetchGate] Script injection failed:', e.message));
 
     // Connect to the native host on first arm (this launches the Java process).
     if (!port) connect();
@@ -96,9 +106,14 @@ browser.tabs.onRemoved.addListener((tabId) => {
 
 // If the armed tab navigates to a new page, re-inject the content script
 // (the previous page's content script is destroyed on navigation).
+// If re-injection fails (e.g. navigated to a privileged page), disarm so
+// the badge does not falsely show ON for a tab that cannot serve requests.
 browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (tabId === armedTabId && changeInfo.status === 'complete') {
         browser.tabs.executeScript(tabId, { file: 'content_script.js' })
-               .catch(e => console.error('[FetchGate] Re-inject after navigation failed:', e.message));
+               .catch(e => {
+                   console.error('[FetchGate] Re-inject after navigation failed:', e.message);
+                   disarm(tabId);
+               });
     }
 });

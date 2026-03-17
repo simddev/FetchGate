@@ -70,4 +70,4 @@ javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
 
-55 tests across two suites: `NativeMessaging` (framing protocol) and `NativeHost` (TCP↔NM bridge). No external dependencies. `out/` is gitignored.
+56 tests across two suites: `NativeMessaging` (framing protocol) and `NativeHost` (TCP↔NM bridge). No external dependencies. `out/` is gitignored.

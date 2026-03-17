@@ -160,7 +160,7 @@ public class NativeHost {
                     }
                 } catch (IOException e) {
                     log("Failed to forward request: " + e);
-                    out.println("{\"error\":\"failed to forward to extension: " + e.getMessage() + "\"}");
+                    out.println("{\"error\":\"failed to forward to extension: " + jsonEscape(e.getMessage()) + "\"}");
                     break; // can't forward any more requests; close this connection
                 }
                 log("→ Firefox: " + truncate(request));
@@ -170,6 +170,14 @@ public class NativeHost {
                 if (response == null) {
                     response = "{\"error\":\"timeout: no response from extension after " + timeoutMs + " ms\"}";
                     log("Timed out waiting for Firefox response");
+                    out.println(response);
+                    // Break instead of looping: a timed-out request may still produce a late
+                    // reply from Firefox. If we kept this connection open, that stale reply
+                    // could arrive after the next request's responseQueue.clear() and be
+                    // delivered as the answer to a different request. Closing the connection
+                    // forces the caller to reconnect, giving the stale reply time to arrive
+                    // and be swept by clear() before the next poll().
+                    break;
                 } else if (SHUTDOWN_SENTINEL.equals(response)) {
                     response = "{\"error\":\"connection to Firefox was closed\"}";
                     log("Firefox disconnected — returning error to caller");
@@ -192,6 +200,19 @@ public class NativeHost {
         // stderr is intentional: stdout is the Native Messaging channel and must
         // not be written to directly anywhere in this program.
         System.err.println("[FetchGate " + Instant.now() + "] " + msg);
+    }
+
+    /**
+     * Minimal JSON string escaper for hand-built error payloads.
+     * Prevents a quote or backslash in an exception message from producing malformed JSON.
+     */
+    private static String jsonEscape(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t");
     }
 
     /** Truncate a payload string for logging to avoid flooding stderr with large bodies. */
