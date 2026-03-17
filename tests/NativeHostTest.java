@@ -377,30 +377,25 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("request containing reserved __fg_id field returns error, connection stays open", () -> {
-            // A caller-supplied __fg_id would produce a duplicate key in the forwarded JSON.
-            // JavaScript last-key-wins would make background.js echo the caller's value,
-            // the host's ID check would never match, and the request would always time out.
-            // The host must reject it immediately with an error instead.
+        TestRunner.test("caller-supplied __fg_id does not break routing — host injection takes precedence", () -> {
+            // The host injects __fg_id as the LAST field. JavaScript last-key-wins
+            // means background.js sees the host's value even when the caller also
+            // supplied one, so routing always works without any rejection logic.
             try (Fixture f = new Fixture()) {
-                try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
-                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
-                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+                // Caller includes their own __fg_id:99 — the host appends its own after.
+                String request  = "{\"__fg_id\":99,\"method\":\"GET\",\"url\":\"/\"}";
+                String response = "{\"status\":200,\"body\":\"ok\"}";
 
-                    out.println("{\"__fg_id\":99,\"method\":\"GET\",\"url\":\"/\"}");
-                    String reply = in.readLine();
-                    Assert.notNull(reply, "caller must receive an error response");
-                    Assert.contains(reply, "error");
-                    Assert.contains(reply, "__fg_id");
+                Future<String> result = f.sendAsCaller(request);
 
-                    // Connection must stay open.
-                    String req      = "{\"method\":\"GET\",\"url\":\"/after\"}";
-                    String expected = "{\"status\":200,\"body\":\"recovered\"}";
-                    out.println(req);
-                    int id = Fixture.extractFgId(NativeMessaging.read(f.hostRequestReader));
-                    NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id));
-                    Assert.equal(expected, in.readLine());
-                }
+                // The forwarded JSON will contain two __fg_id values; extractFgId uses
+                // lastIndexOf to return the host's (last) value, not the caller's 99.
+                String forwarded = NativeMessaging.read(f.hostRequestReader);
+                int id = Fixture.extractFgId(forwarded);
+                Assert.isTrue(id != 99, "host ID must not be the caller-supplied 99");
+
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
 
@@ -421,21 +416,30 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("request with embedded newline — only first line is forwarded (protocol limitation)", () -> {
-            // The TCP caller-side protocol is newline-delimited. Callers must send
-            // compact single-line JSON. This test documents what happens if they don't.
+        TestRunner.test("request with embedded newline — each line validated independently", () -> {
+            // Callers must send compact single-line JSON. Multi-line JSON is split at
+            // newlines; each fragment is validated independently. A fragment that does
+            // not end with '}' is rejected with a descriptive error rather than forwarded
+            // as malformed JSON.
             try (Fixture f = new Fixture()) {
-                String firstLine  = "{\"method\":\"GET\",";
-                String secondLine = "\"url\":\"/api\"}";
+                // A caller mistakenly splits a JSON object across two lines.
+                String firstLine  = "{\"method\":\"GET\",";  // incomplete — no closing }
+                String secondLine = "\"url\":\"/api\"}";      // not a JSON object
 
-                f.sendAsCaller(firstLine + "\n" + secondLine);
+                try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
+                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
 
-                String forwarded = NativeMessaging.read(f.hostRequestReader);
-                // The forwarded string has __fg_id injected; strip it and compare to original.
-                Assert.equal(firstLine, Fixture.stripFgId(forwarded));
+                    out.println(firstLine);
+                    String reply = in.readLine();
+                    Assert.notNull(reply, "incomplete first line must produce an error response");
+                    Assert.contains(reply, "error"); // rejected: does not end with '}'
+                }
 
-                int id = Fixture.extractFgId(forwarded);
-                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200}", id));
+                // Host keeps accepting after validation errors.
+                try (Socket s2 = new Socket("127.0.0.1", f.host.getBoundPort())) {
+                    Assert.isTrue(s2.isConnected(), "host must still accept after validation errors");
+                }
             }
         });
 
@@ -756,10 +760,12 @@ public class NativeHostTest {
 
         /**
          * Extract the numeric __fg_id value from a JSON string.
+         * Uses lastIndexOf so that when a caller-supplied __fg_id appears before the
+         * host-injected one, the host's value (appended last) is always returned.
          * Throws if the field is not present.
          */
         static int extractFgId(String json) {
-            int idx = json.indexOf("\"__fg_id\":");
+            int idx = json.lastIndexOf("\"__fg_id\":");
             int start = idx + 10; // length of "\"__fg_id\":"
             int end = start;
             while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
@@ -767,11 +773,18 @@ public class NativeHostTest {
         }
 
         /**
-         * Remove the __fg_id tracking field from a JSON string.
-         * Mirrors the logic in NativeHost.stripFgId.
+         * Remove the __fg_id tracking field from a JSON string, regardless of position.
+         * The host now injects at the END (last field), so the preceding comma must be
+         * consumed. Responses from background.js have it first (following comma).
          */
         static String stripFgId(String json) {
-            return json.replaceFirst("\"__fg_id\":\\d+,?", "");
+            // Remove as first field: {"__fg_id":N,...rest}
+            String s = json.replaceFirst("\"__fg_id\":\\d+,", "");
+            // Remove as last field: {...,"__fg_id":N}
+            s = s.replaceFirst(",\"__fg_id\":\\d+", "");
+            // Remove as only field: {"__fg_id":N}
+            s = s.replaceFirst("\\{\"__fg_id\":\\d+}", "{}");
+            return s;
         }
 
         /**

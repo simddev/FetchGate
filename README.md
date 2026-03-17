@@ -83,7 +83,7 @@ over from a previous timed-out request, eliminating the reply-misdelivery race.
 | `body`        | no       | Request body (for POST/PUT)                                        |
 | `credentials` | no       | Fetch credentials mode: `"same-origin"` (default), `"include"`, or `"omit"` |
 
-`__fg_id` is a reserved field used internally for reply tracking. Requests containing this field are rejected with an error.
+`__fg_id` is used internally for reply tracking. If a caller includes it, the host's value (appended last) takes precedence via JavaScript's last-key-wins semantics.
 
 **Response** (extension → host → caller):
 
@@ -140,11 +140,14 @@ java  -cp out TestRunner
 ## Known limitations
 
 - **Single-line JSON only.** The caller-side TCP protocol is newline-delimited.
-  Sending pretty-printed (multi-line) JSON will cause silent truncation at the
-  first newline. Always send compact, single-line JSON.
+  Each line is validated independently; a line that does not form a complete
+  JSON object (starts with `{`, ends with `}`) is rejected with an error.
+  Always send compact, single-line JSON.
 
 - **One armed tab at a time.** The background script tracks a single armed tab.
-  Arming a second tab automatically disarms the first.
+  Arming a second tab automatically disarms the first. If the native host
+  disconnects (ERR badge), clicking the toolbar button once re-arms and
+  reconnects; a second click is not required.
 
 - **Extension reloads on browser restart.** Temporary add-ons (loaded via
   `about:debugging`) are not persisted across Firefox restarts. See
