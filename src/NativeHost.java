@@ -75,7 +75,7 @@ public class NativeHost {
         try {
             if (serverSocket != null) serverSocket.close();
         } catch (IOException e) {
-            log("Error stopping server: " + e.getMessage());
+            log("Error stopping server: " + e);
         }
     }
 
@@ -116,11 +116,12 @@ public class NativeHost {
                         stop(); // closes the server socket, breaking the accept() loop
                         return;
                     }
-                    log("← Firefox: " + msg);
+                    log("← Firefox: " + truncate(msg));
                     responseQueue.put(msg);
                 }
             } catch (Exception e) {
-                log("stdin-reader fatal error: " + e.getMessage());
+                log("stdin-reader fatal error: " + e);
+                responseQueue.offer(SHUTDOWN_SENTINEL); // unblock any waiting caller immediately
                 stop();
             }
         }, "stdin-reader");
@@ -144,7 +145,7 @@ public class NativeHost {
             String request;
             while ((request = in.readLine()) != null) {
                 if (request.isBlank()) continue;
-                log("← Caller: " + request);
+                log("← Caller: " + truncate(request));
 
                 // Discard any stale response left in the queue from a previous
                 // timed-out request that arrived late.
@@ -162,7 +163,7 @@ public class NativeHost {
                     out.println("{\"error\":\"failed to forward to extension: " + e.getMessage() + "\"}");
                     break; // can't forward any more requests; close this connection
                 }
-                log("→ Firefox: " + request);
+                log("→ Firefox: " + truncate(request));
 
                 // Block until the extension responds, the timeout expires, or Firefox disconnects.
                 String response = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
@@ -176,12 +177,12 @@ public class NativeHost {
                     break;
                 }
 
-                log("→ Caller: " + response);
+                log("→ Caller: " + truncate(response));
                 out.println(response);
             }
 
         } catch (Exception e) {
-            log("Error handling caller: " + e.getMessage());
+            log("Error handling caller: " + e);
         }
     }
 
@@ -191,5 +192,13 @@ public class NativeHost {
         // stderr is intentional: stdout is the Native Messaging channel and must
         // not be written to directly anywhere in this program.
         System.err.println("[FetchGate " + Instant.now() + "] " + msg);
+    }
+
+    /** Truncate a payload string for logging to avoid flooding stderr with large bodies. */
+    private static String truncate(String s) {
+        if (s == null) return "<null>";
+        int limit = 120;
+        return s.length() <= limit ? s
+                : s.substring(0, limit) + "…[" + s.length() + " chars total]";
     }
 }
