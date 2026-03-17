@@ -165,8 +165,8 @@ public class NativeHost {
 
                 // The protocol requires complete JSON objects. Reject anything that doesn't
                 // start with '{' (not an object) or doesn't end with '}' (incomplete/truncated).
-                // injectFgId() operates on json.substring(0, length-1); requiring a closing '}'
-                // ensures it always removes the final '}' rather than arbitrary content.
+                // buildEnvelope() assumes these invariants; structural validity of the inner
+                // JSON is checked by JavaScript's JSON.parse() in background.js.
                 if (!request.startsWith("{") || !request.endsWith("}")) {
                     log("Rejecting malformed request (not a complete JSON object): " + truncate(request));
                     out.println("{\"error\":\"invalid request: expected a complete JSON object\"}");
@@ -187,6 +187,15 @@ public class NativeHost {
                 // Discard any stale response left in the queue from a previous
                 // timed-out request that arrived late.
                 responseQueue.clear();
+
+                // Re-check after the clear: if Firefox died in the tiny window between the
+                // first check above and clear(), the sentinel would have been consumed.
+                // This second check narrows the race to near zero without heavy locking.
+                if (!firefoxAlive) {
+                    log("Firefox already disconnected — returning error to caller");
+                    out.println("{\"error\":\"connection to Firefox was closed\"}");
+                    break;
+                }
 
                 // Assign a unique ID and inject it into the JSON. background.js echoes the
                 // ID back in the response, so the host can verify each reply belongs to the
