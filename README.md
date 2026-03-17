@@ -62,7 +62,9 @@ content_script.js
 
 Firefox launches the Java host automatically when you arm the first tab. It
 runs as a persistent server on `localhost:9919` until Firefox or the Java
-process exits. You connect to it from any language over plain TCP.
+process exits. You connect to it from any language over plain TCP. A single
+TCP connection supports multiple sequential requests — connect, send as many
+requests as you need, then disconnect.
 
 ### Python host
 
@@ -219,6 +221,8 @@ Click the toolbar button again to re-run the script.
 
 ## Building and testing
 
+**Java host:**
+
 ```bash
 # Compile Java source
 javac -d out src/*.java
@@ -226,6 +230,13 @@ javac -d out src/*.java
 # Run the test suite (64 tests, no external dependencies)
 javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
+```
+
+**Python host:**
+
+```bash
+# Run the test suite (26 tests, no external dependencies)
+python3 host_py/test_fetchgate.py
 ```
 
 The Python host requires no compilation. Python 3.6+ is the only requirement.
