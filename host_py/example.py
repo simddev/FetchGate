@@ -33,7 +33,7 @@ fg = FetchGate()
 # --- put your fetch calls below ---
 
 try:
-    resp = fg.fetch({"method": "GET", "url": "/"})
+    resp = fg.fetch({"method": "GET", "url": "/robots.txt"})
 
     if "error" in resp:
         print(f"Error: {resp['error']}", file=sys.stderr)

@@ -319,13 +319,13 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   only the last `Set-Cookie` value survives. This rarely matters for
   data-extraction requests.
 
-- **Response body is always decoded text.** The content script reads the body
-  with `response.text()`, which decodes the response using the charset declared
-  in the `Content-Type` header (or UTF-8 if absent). Binary payloads (images,
-  PDFs, ZIPs, protobuf) will be corrupted — there is no way to retrieve raw
-  bytes through this path. Text responses in correctly-declared non-UTF-8
-  encodings (Shift-JIS, Windows-1252, etc.) will arrive as Unicode strings and
-  are not corrupted; pages that omit or mis-declare their encoding may be.
+- **Response body is always decoded as UTF-8 text.** The content script reads
+  the body with `response.text()`, which — per the WHATWG Fetch spec — always
+  decodes using UTF-8, ignoring any charset declared in `Content-Type`. Binary
+  payloads (images, PDFs, ZIPs, protobuf) will be corrupted. Pages encoded in
+  non-UTF-8 charsets (Shift-JIS, Windows-1252, etc.) will also be corrupted,
+  even if `Content-Type` correctly declares the encoding. The practical impact
+  is low: the overwhelming majority of modern sites serve UTF-8.
 
 - **Logs may contain sensitive data.** Both hosts log requests and responses to
   stderr, truncated at 120 characters. On a multi-user system this output may
