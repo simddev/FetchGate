@@ -70,14 +70,6 @@ async function onRequestFromHost(msg) {
     }
 }
 
-function sendToHost(message) {
-    if (port) {
-        port.postMessage(message);
-    } else {
-        console.error('[FetchGate] Cannot send — not connected to native host.');
-    }
-}
-
 // ─── Tab arming ──────────────────────────────────────────────────────────────
 
 // Toolbar button clicked: toggle armed state for the current tab.
