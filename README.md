@@ -59,8 +59,9 @@ Content Script  (content_script.js)
   within the browser process.
 
 **Design constraint:** the extension code is intentionally minimal and dumb.
-No validation logic lives in JavaScript. All of that belongs in the Java host
-or the caller.
+Semantic validation (allowed methods, URL policy, etc.) belongs in the Java host
+or the caller. Syntax validation is delegated to JavaScript's native JSON parser
+via the envelope mechanism described below.
 
 **Request envelope:** every request forwarded to Firefox is wrapped in a
 controlled envelope:
@@ -92,7 +93,7 @@ request, eliminating the reply-misdelivery race.
 | `body`        | no       | Request body (for POST/PUT)                                        |
 | `credentials` | no       | Fetch credentials mode: `"same-origin"` (default), `"include"`, or `"omit"` |
 
-`__fg_id` is used internally for reply tracking. If a caller includes it, the host's value (appended last) takes precedence via JavaScript's last-key-wins semantics.
+`__fg_id` is used internally for reply tracking and must not be sent by callers; it is stripped from the response before it reaches the caller.
 
 **Response** (extension → host → caller):
 
@@ -141,7 +142,7 @@ You should receive a single JSON line with `status`, `headers`, and `body`.
 # Compile
 javac -d out src/*.java
 
-# Run the test suite (59 tests, no external dependencies)
+# Run the test suite (60 tests, no external dependencies)
 javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
@@ -175,6 +176,13 @@ java  -cp out TestRunner
   spec — but this only works if the target server responds with
   `Access-Control-Allow-Credentials: true` and a non-wildcard origin; otherwise
   the browser blocks the response.
+
+- **Response body is always UTF-8 text.** `content_script.js` reads the
+  response body with `response.text()`, which the Fetch specification always
+  decodes as UTF-8. Binary payloads (images, PDFs, ZIPs, protobuf) and
+  responses in non-UTF-8 encodings (e.g. legacy Windows-1252 or Shift-JIS
+  pages) will be corrupted in transit. HTML and JSON responses in UTF-8 are
+  unaffected.
 
 - **Logs may contain sensitive data.** Requests and responses are logged to
   stderr (truncated at 120 characters). On a multi-user system these may
