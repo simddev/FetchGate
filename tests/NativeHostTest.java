@@ -12,12 +12,14 @@ import java.util.concurrent.*;
  *
  * Helper: Fixture sets up the plumbing common to most tests.
  *
- * Request ID protocol:
- *   NativeHost injects a unique "__fg_id" field into every request it forwards
- *   to Firefox. background.js echoes the field in the response. The host matches
- *   responses by ID and discards any stale replies left over from timed-out
- *   requests. Tests use Fixture helpers (readForwardedId, tagged) to participate
- *   in this protocol from the "Firefox side" of the pipe.
+ * Envelope protocol:
+ *   NativeHost wraps every outbound request in an envelope:
+ *     {"__fg_id":N,"req":"ESCAPED_CALLER_JSON"}
+ *   background.js echoes __fg_id in the response and parses "req" with JSON.parse()
+ *   to validate structure before forwarding to the content script. The host matches
+ *   responses by ID (startsWith check) and discards stale replies from timed-out
+ *   requests. Tests use Fixture helpers (readForwardedId, tagged, extractReqField)
+ *   to participate in this protocol from the "Firefox side" of the pipe.
  */
 public class NativeHostTest {
 
@@ -377,22 +379,25 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("caller-supplied __fg_id does not break routing — host injection takes precedence", () -> {
-            // The host injects __fg_id as the LAST field. JavaScript last-key-wins
-            // means background.js sees the host's value even when the caller also
-            // supplied one, so routing always works without any rejection logic.
+        TestRunner.test("caller-supplied __fg_id does not break routing — host envelope isolates it", () -> {
+            // The host wraps the caller's JSON as a string in the envelope:
+            //   {"__fg_id":N,"req":"{\"__fg_id\":99,...}"}
+            // background.js sees only the outer __fg_id (N) for routing, and
+            // JSON.parse(msg.req) surfaces the caller's __fg_id:99 only to
+            // content_script.js, which ignores unknown fields.
             try (Fixture f = new Fixture()) {
-                // Caller includes their own __fg_id:99 — the host appends its own after.
+                // Caller includes their own __fg_id:99 — it ends up inside the req string.
                 String request  = "{\"__fg_id\":99,\"method\":\"GET\",\"url\":\"/\"}";
                 String response = "{\"status\":200,\"body\":\"ok\"}";
 
                 Future<String> result = f.sendAsCaller(request);
 
-                // The forwarded JSON will contain two __fg_id values; extractFgId uses
-                // lastIndexOf to return the host's (last) value, not the caller's 99.
-                String forwarded = NativeMessaging.read(f.hostRequestReader);
-                int id = Fixture.extractFgId(forwarded);
+                // extractFgId returns the outer envelope's __fg_id (host-assigned), not 99.
+                String envelope = NativeMessaging.read(f.hostRequestReader);
+                int id = Fixture.extractFgId(envelope);
                 Assert.isTrue(id != 99, "host ID must not be the caller-supplied 99");
+                // The caller's original JSON is preserved verbatim inside "req".
+                Assert.equal(request, Fixture.extractReqField(envelope));
 
                 NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
                 Assert.equal(response, result.get(2, TimeUnit.SECONDS));
@@ -747,25 +752,25 @@ public class NativeHostTest {
         }
 
         /**
-         * Reads one request forwarded to Firefox, asserts that its content
-         * (with __fg_id stripped) equals {@code expectedOriginal}, and returns
-         * the __fg_id. Use this to verify that the host preserves caller-supplied
-         * fields while injecting the tracking field.
+         * Reads one request forwarded to Firefox, asserts that its "req" field
+         * (decoded) equals {@code expectedOriginal}, and returns the __fg_id.
+         * Use this to verify that the host preserves caller-supplied fields
+         * inside the envelope.
          */
         int readForwardedId(String expectedOriginal) throws IOException {
-            String json = NativeMessaging.read(hostRequestReader);
-            Assert.equal(expectedOriginal, stripFgId(json));
-            return extractFgId(json);
+            String envelope = NativeMessaging.read(hostRequestReader);
+            Assert.equal(expectedOriginal, extractReqField(envelope));
+            return extractFgId(envelope);
         }
 
         /**
          * Extract the numeric __fg_id value from a JSON string.
-         * Uses lastIndexOf so that when a caller-supplied __fg_id appears before the
-         * host-injected one, the host's value (appended last) is always returned.
+         * __fg_id is always the first field in both the forwarded envelope and
+         * in background.js responses, so indexOf is sufficient.
          * Throws if the field is not present.
          */
         static int extractFgId(String json) {
-            int idx = json.lastIndexOf("\"__fg_id\":");
+            int idx = json.indexOf("\"__fg_id\":");
             int start = idx + 10; // length of "\"__fg_id\":"
             int end = start;
             while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
@@ -773,18 +778,33 @@ public class NativeHostTest {
         }
 
         /**
-         * Remove the __fg_id tracking field from a JSON string, regardless of position.
-         * The host now injects at the END (last field), so the preceding comma must be
-         * consumed. Responses from background.js have it first (following comma).
+         * Decode the "req" string field from a forwarded envelope.
+         * The envelope looks like: {"__fg_id":N,"req":"ESCAPED_JSON"}
+         * Returns the original caller JSON string.
          */
-        static String stripFgId(String json) {
-            // Remove as first field: {"__fg_id":N,...rest}
-            String s = json.replaceFirst("\"__fg_id\":\\d+,", "");
-            // Remove as last field: {...,"__fg_id":N}
-            s = s.replaceFirst(",\"__fg_id\":\\d+", "");
-            // Remove as only field: {"__fg_id":N}
-            s = s.replaceFirst("\\{\"__fg_id\":\\d+}", "{}");
-            return s;
+        static String extractReqField(String envelope) {
+            int reqIdx = envelope.indexOf("\"req\":\"");
+            int start = reqIdx + 7; // skip past "req":"
+            StringBuilder sb = new StringBuilder();
+            for (int i = start; i < envelope.length(); i++) {
+                char c = envelope.charAt(i);
+                if (c == '\\' && i + 1 < envelope.length()) {
+                    char next = envelope.charAt(++i);
+                    switch (next) {
+                        case '"':  sb.append('"');  break;
+                        case '\\': sb.append('\\'); break;
+                        case 'n':  sb.append('\n'); break;
+                        case 'r':  sb.append('\r'); break;
+                        case 't':  sb.append('\t'); break;
+                        default:   sb.append('\\'); sb.append(next); break;
+                    }
+                } else if (c == '"') {
+                    break; // end of the JSON string value
+                } else {
+                    sb.append(c);
+                }
+            }
+            return sb.toString();
         }
 
         /**
