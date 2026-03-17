@@ -149,7 +149,30 @@ public class NativeHost {
 
             String request;
             while ((request = in.readLine()) != null) {
+                // Normalise: strip leading/trailing whitespace before any further handling.
+                // injectFgId() assumes the JSON starts with '{'; without this strip a request
+                // like " {...}" would produce {"__fg_id":N,{...}} — malformed JSON.
+                request = request.strip();
                 if (request.isBlank()) continue;
+
+                // The protocol requires JSON objects. Reject anything else cleanly rather
+                // than forwarding garbage or producing a malformed NM message.
+                if (!request.startsWith("{")) {
+                    log("Rejecting non-object request: " + truncate(request));
+                    out.println("{\"error\":\"invalid request: expected a JSON object\"}");
+                    continue; // keep the connection open; the caller can retry
+                }
+
+                // __fg_id is reserved for internal reply tracking. A caller-supplied
+                // __fg_id would create a duplicate key in the forwarded JSON; JavaScript
+                // last-key-wins means background.js echoes the caller's value, not the
+                // host's, so the response never matches and the request always times out.
+                if (request.contains("\"__fg_id\":")) {
+                    log("Rejecting request with reserved field __fg_id: " + truncate(request));
+                    out.println("{\"error\":\"invalid request: __fg_id is a reserved field\"}");
+                    continue;
+                }
+
                 log("← Caller: " + truncate(request));
 
                 // Discard any stale response left in the queue from a previous

@@ -336,6 +336,74 @@ public class NativeHostTest {
             }
         });
 
+        TestRunner.test("request with leading/trailing whitespace is trimmed and processed correctly", () -> {
+            // injectFgId() requires the JSON to start with '{'. Without stripping,
+            // " {\"url\":\"...\"}" would yield {"__fg_id":1,{"url":"..."}} — malformed JSON
+            // that the extension would fail to parse. After stripping it must work normally.
+            try (Fixture f = new Fixture()) {
+                String bare     = "{\"method\":\"GET\",\"url\":\"/trimmed\"}";
+                String padded   = "   " + bare + "   ";
+                String response = "{\"status\":200,\"body\":\"ok\"}";
+
+                Future<String> result = f.sendAsCaller(padded);
+                int id = f.readForwardedId(bare); // stripped content must match bare
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("non-object request (not starting with '{') returns error, connection stays open", () -> {
+            // The protocol requires JSON objects. Arrays, bare strings, and other JSON
+            // types are rejected with a descriptive error; the connection stays open
+            // so the caller can retry.
+            try (Fixture f = new Fixture()) {
+                try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
+                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+
+                    out.println("[\"url\",\"/api\"]");
+                    String reply = in.readLine();
+                    Assert.notNull(reply, "caller must receive an error response");
+                    Assert.contains(reply, "error");
+
+                    // Connection must still be open — a valid follow-up request must work.
+                    String req      = "{\"method\":\"GET\",\"url\":\"/retry\"}";
+                    String expected = "{\"status\":200,\"body\":\"ok\"}";
+                    out.println(req);
+                    int id = Fixture.extractFgId(NativeMessaging.read(f.hostRequestReader));
+                    NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id));
+                    Assert.equal(expected, in.readLine());
+                }
+            }
+        });
+
+        TestRunner.test("request containing reserved __fg_id field returns error, connection stays open", () -> {
+            // A caller-supplied __fg_id would produce a duplicate key in the forwarded JSON.
+            // JavaScript last-key-wins would make background.js echo the caller's value,
+            // the host's ID check would never match, and the request would always time out.
+            // The host must reject it immediately with an error instead.
+            try (Fixture f = new Fixture()) {
+                try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
+                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+
+                    out.println("{\"__fg_id\":99,\"method\":\"GET\",\"url\":\"/\"}");
+                    String reply = in.readLine();
+                    Assert.notNull(reply, "caller must receive an error response");
+                    Assert.contains(reply, "error");
+                    Assert.contains(reply, "__fg_id");
+
+                    // Connection must stay open.
+                    String req      = "{\"method\":\"GET\",\"url\":\"/after\"}";
+                    String expected = "{\"status\":200,\"body\":\"recovered\"}";
+                    out.println(req);
+                    int id = Fixture.extractFgId(NativeMessaging.read(f.hostRequestReader));
+                    NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(expected, id));
+                    Assert.equal(expected, in.readLine());
+                }
+            }
+        });
+
         TestRunner.test("whitespace-only request is discarded — host keeps running", () -> {
             try (Fixture f = new Fixture()) {
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
