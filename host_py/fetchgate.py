@@ -8,30 +8,38 @@ the armed tab.
 Usage
 -----
     #!/usr/bin/env python3
+    import sys
     from fetchgate import FetchGate
 
     fg = FetchGate()
+    # After construction, sys.stdout is redirected to sys.stderr so that
+    # accidental print() calls cannot corrupt the Native Messaging stream.
+    # Use sys.__stdout__ to write results to real stdout (e.g. for piping).
     resp = fg.fetch({"method": "GET", "url": "/api/data"})
-    print(resp["body"])
+    sys.__stdout__.write(resp["body"])
 
 Then point ~/.mozilla/native-messaging-hosts/fetchgate.json at your script.
 See fetchgate_py.json in the project root for the manifest template.
 
 Notes
 -----
-- stdout is captured for the Native Messaging binary stream. Any output
-  (print, logging) must go to stderr — FetchGate redirects sys.stdout to
-  sys.stderr automatically on construction.
+- stdout is captured for the Native Messaging binary stream. FetchGate
+  redirects sys.stdout to sys.stderr on construction so that accidental
+  print() calls do not corrupt the stream. Use sys.__stdout__ to write
+  to real stdout after construction.
 - Firefox launches (and owns) the process lifetime. The script runs once
   and exits; to re-run it, click the toolbar button again to re-arm.
 - Responses with {"error": "..."} are returned normally, not raised.
   Only a lost NM connection raises FetchGateError.
+- There is no request timeout. fetch() blocks until the extension replies
+  or the NM connection is closed. If the browser network request hangs
+  (e.g. a slow or unresponsive server), the script will block indefinitely.
 """
 
 import json
 import struct
 import sys
-from typing import Dict, Optional
+from typing import Optional
 
 
 class FetchGateError(Exception):
@@ -56,6 +64,7 @@ class FetchGate:
         # Redirect text stdout to stderr so accidental print() calls cannot
         # corrupt the binary Native Messaging stream — same reason as the
         # System.setOut(System.err) call in the Java host's Main.java.
+        # The original stdout is still accessible via sys.__stdout__.
         sys.stdout = sys.stderr  # type: ignore[assignment]
 
     def fetch(self, spec: dict) -> dict:
@@ -93,7 +102,7 @@ class FetchGate:
             if msg.get("__fg_id") == req_id:
                 del msg["__fg_id"]
                 return msg
-            # Wrong ID — stale reply from a previous timed-out request; discard.
+            # Wrong ID — stale reply from a previous request; discard.
 
     # ── Internal NM framing ───────────────────────────────────────────────────
 
@@ -115,4 +124,7 @@ class FetchGate:
         payload = self._in.read(length)
         if len(payload) < length:
             return None  # truncated frame
-        return json.loads(payload.decode("utf-8"))
+        try:
+            return json.loads(payload.decode("utf-8"))
+        except json.JSONDecodeError:
+            return None  # malformed JSON frame — treat as lost connection
