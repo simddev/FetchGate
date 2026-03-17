@@ -706,6 +706,58 @@ public class NativeHostTest {
             }
         });
 
+        TestRunner.test("request body containing backslash is preserved verbatim through the envelope", () -> {
+            // jsonStringEncode must double every backslash: '\' → '\\'. Without this,
+            // a body like "C:\\path" would arrive at background.js as "C:\path" (one slash),
+            // which would silently corrupt the request.
+            try (Fixture f = new Fixture()) {
+                // Windows-style path in body: the JSON string value contains a literal backslash.
+                // In the Java String: \\  represents the two-char sequence backslash-backslash,
+                // which is the JSON encoding of a single backslash in the value.
+                String request = "{\"method\":\"POST\",\"url\":\"/upload\","
+                        + "\"body\":\"C:\\\\Users\\\\alice\\\\file.txt\"}";
+                String response = "{\"status\":200}";
+
+                Future<String> result = f.sendAsCaller(request);
+                // readForwardedId decodes the "req" field and asserts it equals request verbatim.
+                int id = f.readForwardedId(request);
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("response body containing __fg_id-like content is not corrupted by stripFgId", () -> {
+            // stripFgId uses replaceFirst("\"__fg_id\":\\d+,?", ""). The __fg_id field in
+            // the response body is JSON-escaped (\"__fg_id\":), so the unescaped regex pattern
+            // matches only the top-level __fg_id injected by background.js, not content inside
+            // a string value. This test proves that the caller-visible body is not damaged.
+            try (Fixture f = new Fixture()) {
+                // A response whose body field contains a JSON object that looks like __fg_id.
+                // background.js would encode this as a string value, so the quotes are escaped.
+                String innerJson = "{\\\"__fg_id\\\":1,\\\"nested\\\":true}";
+                String response = "{\"status\":200,\"body\":\"" + innerJson + "\"}";
+                String expected = response; // body must arrive at caller unchanged
+
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
+                int id = f.readForwardedId();
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
+                Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("empty JSON object {} is forwarded and response returned correctly", () -> {
+            // {} passes startsWith/endsWith validation. buildEnvelope wraps it as
+            // {"__fg_id":N,"req":"{}"}, which background.js can parse and dispatch.
+            // The response round-trip must work normally.
+            try (Fixture f = new Fixture()) {
+                String response = "{\"status\":200,\"body\":\"ok\"}";
+                Future<String> result = f.sendAsCaller("{}");
+                int id = f.readForwardedId("{}");
+                NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged(response, id));
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
         TestRunner.test("firefox EOF closes the TCP server — no new connections accepted", () -> {
             // When the Native Messaging pipe reaches EOF, stdin-reader calls stop().
             // The TCP server socket must close, refusing further connections.

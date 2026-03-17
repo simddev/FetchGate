@@ -142,7 +142,7 @@ You should receive a single JSON line with `status`, `headers`, and `body`.
 # Compile
 javac -d out src/*.java
 
-# Run the test suite (60 tests, no external dependencies)
+# Run the test suite (63 tests, no external dependencies)
 javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
