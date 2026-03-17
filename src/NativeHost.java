@@ -2,6 +2,7 @@ import java.io.*;
 import java.net.*;
 import java.time.Instant;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Core of the FetchGate native host.
@@ -41,6 +42,10 @@ public class NativeHost {
 
     // Responses from Firefox land here; polled by the thread handling the current caller.
     private final BlockingQueue<String> responseQueue = new LinkedBlockingQueue<>();
+
+    // Monotonically increasing counter. Each outbound request gets a unique ID so the
+    // host can detect and discard stale responses left over from timed-out requests.
+    private final AtomicInteger requestCounter = new AtomicInteger(0);
 
     // Set once the ServerSocket is bound; lets tests discover the OS-assigned port.
     private volatile int          boundPort    = -1;
@@ -151,32 +156,49 @@ public class NativeHost {
                 // timed-out request that arrived late.
                 responseQueue.clear();
 
-                // Forward the request to the extension via Native Messaging.
+                // Assign a unique ID and inject it into the JSON. background.js echoes the
+                // ID back in the response, so the host can verify each reply belongs to the
+                // current request and discard any stale replies from prior timed-out requests.
+                // This closes the race window left by the break-after-timeout approach alone.
+                int reqId  = requestCounter.incrementAndGet();
+                String tagged = injectFgId(request, reqId);
+
+                // Forward the tagged request to the extension via Native Messaging.
                 // Catch write failures (oversized request, broken pipe) and return a
                 // proper error JSON to the caller rather than silently closing the socket.
                 try {
                     synchronized (nativeOut) {
-                        NativeMessaging.write(nativeOut, request);
+                        NativeMessaging.write(nativeOut, tagged);
                     }
                 } catch (IOException e) {
                     log("Failed to forward request: " + e);
                     out.println("{\"error\":\"failed to forward to extension: " + jsonEscape(e.getMessage()) + "\"}");
                     break; // can't forward any more requests; close this connection
                 }
-                log("→ Firefox: " + truncate(request));
+                log("→ Firefox: " + truncate(tagged));
 
-                // Block until the extension responds, the timeout expires, or Firefox disconnects.
-                String response = responseQueue.poll(timeoutMs, TimeUnit.MILLISECONDS);
+                // Poll for the response that carries the expected __fg_id.
+                // Responses with the wrong ID are stale replies from a prior timed-out
+                // request; discard them and keep waiting within the same timeout budget.
+                long   deadline = System.currentTimeMillis() + timeoutMs;
+                String response = null;
+                while (true) {
+                    long remaining = deadline - System.currentTimeMillis();
+                    if (remaining <= 0) break; // timed out
+                    String candidate = responseQueue.poll(remaining, TimeUnit.MILLISECONDS);
+                    if (candidate == null) break; // timed out
+                    if (SHUTDOWN_SENTINEL.equals(candidate)) { response = candidate; break; }
+                    if (candidate.contains("\"__fg_id\":" + reqId)) { response = candidate; break; }
+                    log("Discarding stale response (wrong __fg_id): " + truncate(candidate));
+                }
+
                 if (response == null) {
                     response = "{\"error\":\"timeout: no response from extension after " + timeoutMs + " ms\"}";
                     log("Timed out waiting for Firefox response");
                     out.println(response);
-                    // Break instead of looping: a timed-out request may still produce a late
-                    // reply from Firefox. If we kept this connection open, that stale reply
-                    // could arrive after the next request's responseQueue.clear() and be
-                    // delivered as the answer to a different request. Closing the connection
-                    // forces the caller to reconnect, giving the stale reply time to arrive
-                    // and be swept by clear() before the next poll().
+                    // Break: a timed-out request may still produce a late reply from Firefox.
+                    // Closing forces the caller to reconnect; the stale reply will arrive with
+                    // the old reqId and be discarded by the ID check on the next connection.
                     break;
                 } else if (SHUTDOWN_SENTINEL.equals(response)) {
                     response = "{\"error\":\"connection to Firefox was closed\"}";
@@ -185,6 +207,8 @@ public class NativeHost {
                     break;
                 }
 
+                // Strip the internal __fg_id tracking field before returning to the caller.
+                response = stripFgId(response);
                 log("→ Caller: " + truncate(response));
                 out.println(response);
             }
@@ -192,6 +216,35 @@ public class NativeHost {
         } catch (Exception e) {
             log("Error handling caller: " + e);
         }
+    }
+
+    /**
+     * Inject the internal request-tracking field into a JSON object string.
+     * Assumes json is a non-null object starting with '{'. The field is placed
+     * first so stripFgId() can remove it with a simple prefix regex.
+     *
+     * Examples:
+     *   {"url":"/"}  →  {"__fg_id":1,"url":"/"}
+     *   {}            →  {"__fg_id":1}
+     */
+    private static String injectFgId(String json, int id) {
+        String field = "\"__fg_id\":" + id;
+        return json.length() <= 2          // "{}" — empty object
+                ? "{" + field + "}"
+                : "{" + field + "," + json.substring(1);
+    }
+
+    /**
+     * Remove the __fg_id tracking field injected by this host and echoed by
+     * background.js before forwarding the response to the caller.
+     * background.js places __fg_id first, so a prefix regex suffices.
+     *
+     * Examples:
+     *   {"__fg_id":1,"status":200}  →  {"status":200}
+     *   {"__fg_id":1}               →  {}
+     */
+    private static String stripFgId(String json) {
+        return json.replaceFirst("\"__fg_id\":\\d+,?", "");
     }
 
     // -------------------------------------------------------------------------
