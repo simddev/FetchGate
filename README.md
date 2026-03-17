@@ -62,10 +62,19 @@ Content Script  (content_script.js)
 No validation logic lives in JavaScript. All of that belongs in the Java host
 or the caller.
 
-**Reply integrity:** every request forwarded to Firefox carries an injected
-`__fg_id` field (incrementing integer). `background.js` echoes it in the
-response. The host matches responses by ID and discards any stale replies left
-over from a previous timed-out request, eliminating the reply-misdelivery race.
+**Request envelope:** every request forwarded to Firefox is wrapped in a
+controlled envelope:
+```json
+{"__fg_id": 1, "req": "{\"method\":\"GET\",\"url\":\"/\"}"}
+```
+`__fg_id` is a monotonically increasing integer used for reply tracking.
+`req` is the caller's JSON encoded as a string — `background.js` calls
+`JSON.parse(msg.req)` to validate and extract it. This means JavaScript's
+native JSON parser validates the request structure, and `__fg_id` appears
+only in the outer envelope, eliminating false-positive response matching.
+`background.js` echoes `__fg_id` in the response. The host matches responses
+by ID and discards any stale replies left over from a previous timed-out
+request, eliminating the reply-misdelivery race.
 
 ## Message format
 

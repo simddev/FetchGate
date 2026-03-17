@@ -176,7 +176,7 @@ public class NativeHost {
                 // current request and discard any stale replies from prior timed-out requests.
                 // This closes the race window left by the break-after-timeout approach alone.
                 int reqId  = requestCounter.incrementAndGet();
-                String tagged = injectFgId(request, reqId);
+                String tagged = buildEnvelope(request, reqId);
 
                 // Forward the tagged request to the extension via Native Messaging.
                 // Catch write failures (oversized request, broken pipe) and return a
@@ -195,6 +195,8 @@ public class NativeHost {
                 // Poll for the response that carries the expected __fg_id.
                 // Responses with the wrong ID are stale replies from a prior timed-out
                 // request; discard them and keep waiting within the same timeout budget.
+                // background.js always puts __fg_id first, so startsWith is unambiguous.
+                String idPrefix = "{\"__fg_id\":" + reqId;
                 long   deadline = System.currentTimeMillis() + timeoutMs;
                 String response = null;
                 while (true) {
@@ -203,7 +205,9 @@ public class NativeHost {
                     String candidate = responseQueue.poll(remaining, TimeUnit.MILLISECONDS);
                     if (candidate == null) break; // timed out
                     if (SHUTDOWN_SENTINEL.equals(candidate)) { response = candidate; break; }
-                    if (candidate.contains("\"__fg_id\":" + reqId)) { response = candidate; break; }
+                    if (candidate.startsWith(idPrefix + ",") || candidate.startsWith(idPrefix + "}")) {
+                        response = candidate; break;
+                    }
                     log("Discarding stale response (wrong __fg_id): " + truncate(candidate));
                 }
 
@@ -234,24 +238,44 @@ public class NativeHost {
     }
 
     /**
-     * Inject the internal request-tracking field into a JSON object string.
-     * Assumes json starts with '{' and ends with '}' (enforced by the caller).
+     * Wrap the caller's raw JSON in a controlled envelope:
+     *   {"__fg_id":N,"req":"ESCAPED_JSON"}
      *
-     * The field is appended as the LAST key. JavaScript's last-key-wins semantics
-     * mean that even if the caller supplied their own __fg_id, the host's value
-     * (injected last) is the one background.js sees and echoes back — no collision
-     * detection or rejection is needed.
+     * The caller's JSON is encoded as a JSON string value. This means
+     * background.js receives a well-structured outer object regardless of
+     * whether the caller's JSON is valid, and delegates structural validation
+     * to JavaScript's native JSON.parse() on the "req" field.
      *
-     * Examples:
-     *   {"url":"/"}             →  {"url":"/","__fg_id":1}
-     *   {}                      →  {"__fg_id":1}
-     *   {"__fg_id":99,"url":"/"} →  {"__fg_id":99,"url":"/","__fg_id":1}  (host's 1 wins)
+     * __fg_id is the FIRST field so background.js can echo it back and the
+     * host can match responses with a startsWith() check rather than contains().
+     * This eliminates the false-positive risk of a nested __fg_id inside the
+     * response payload matching the wrong request ID.
      */
-    private static String injectFgId(String json, int id) {
-        String suffix = ",\"__fg_id\":" + id + "}";
-        return json.length() <= 2          // "{}" — empty object
-                ? "{\"__fg_id\":" + id + "}"
-                : json.substring(0, json.length() - 1) + suffix;
+    private static String buildEnvelope(String requestJson, int id) {
+        return "{\"__fg_id\":" + id + ",\"req\":" + jsonStringEncode(requestJson) + "}";
+    }
+
+    /**
+     * Encode a Java string as a JSON string literal (including surrounding quotes).
+     * Handles all characters that must be escaped in JSON strings.
+     */
+    private static String jsonStringEncode(String s) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"':  sb.append("\\\""); break;
+                case '\\': sb.append("\\\\"); break;
+                case '\n': sb.append("\\n");  break;
+                case '\r': sb.append("\\r");  break;
+                case '\t': sb.append("\\t");  break;
+                default:
+                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
+                    else          sb.append(c);
+            }
+        }
+        sb.append("\"");
+        return sb.toString();
     }
 
     /**

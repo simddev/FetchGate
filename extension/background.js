@@ -32,19 +32,29 @@ function connect() {
 
 // Forward the request to the armed tab's content script, then send the
 // response back to the host.
-// The __fg_id field injected by the native host is echoed back in every
-// response so the host can match replies to requests and discard stale ones.
-async function onRequestFromHost(request) {
-    const id        = request.__fg_id;
+// The host sends an envelope: { __fg_id: N, req: "ESCAPED_JSON" }.
+// __fg_id is echoed in every response so the host can match replies to
+// requests and discard stale ones. req is parsed with JSON.parse() here,
+// which validates JSON structure before anything reaches the content script.
+async function onRequestFromHost(msg) {
+    const id        = msg.__fg_id;
     // Capture the port that delivered this request. The fetch() is async and may
     // outlive the current port (e.g. if the host disconnects and reconnects before
     // the fetch resolves). Replying to the originating port rather than the current
     // global port prevents late replies from leaking into a newer host session.
     const replyPort = port;
 
-    function reply(msg) {
-        if (replyPort) replyPort.postMessage(msg);
+    function reply(r) {
+        if (replyPort) replyPort.postMessage(r);
         else console.error('[FetchGate] Cannot reply — originating port disconnected.');
+    }
+
+    let request;
+    try {
+        request = JSON.parse(msg.req);
+    } catch (e) {
+        reply({ __fg_id: id, error: 'invalid request JSON: ' + e.message });
+        return;
     }
 
     if (armedTabId === null) {
