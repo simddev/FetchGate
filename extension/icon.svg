@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <title>FetchGate</title>
+
+  <!-- Orange arrow shaft — drawn first so the gate posts overlay it,
+       giving the impression the arrow passes through the gate. -->
+  <rect x="0" y="21" width="42" height="6" rx="1" fill="#EA580C"/>
+
+  <!-- Blue gate: left post, right post, top crossbeam -->
+  <rect x="5"  y="5" width="9" height="38" rx="2" fill="#2563EB"/>
+  <rect x="31" y="5" width="9" height="38" rx="2" fill="#2563EB"/>
+  <rect x="5"  y="5" width="35" height="9"  rx="2" fill="#2563EB"/>
+
+  <!-- Arrowhead — drawn last so it sits in front of the right post,
+       clearly emerging from the gate. -->
+  <polygon points="40,14 48,24 40,34" fill="#EA580C"/>
+</svg>
