@@ -47,8 +47,11 @@ Content Script  (content_script.js)
 **IPC in detail:**
 
 - *Caller ↔ Native Host* — plain TCP on `localhost:9919`. One JSON object per
-  line (newline-delimited). Persistent connections are supported; the host
-  closes only on timeout or error.
+  line (newline-delimited). Persistent connections are supported (multiple
+  sequential requests on one socket); the host closes only on timeout or error.
+  The host is **single-caller**: it handles one TCP connection at a time and
+  does not accept the next connection until the current one closes. See
+  Known Limitations.
 
 - *Native Host ↔ Extension* — [Firefox Native Messaging][nm]: each message is
   a 4-byte little-endian unsigned integer (payload length) followed by a UTF-8
@@ -57,6 +60,19 @@ Content Script  (content_script.js)
 
 - *Background ↔ Content Script* — `browser.tabs.sendMessage()` / `sendResponse`
   within the browser process.
+
+**Extension permissions:**
+- `nativeMessaging` — required to call `browser.runtime.connectNative()`.
+- `activeTab` — grants script-injection access to the tab the user just clicked.
+  This is sufficient for the initial arm, but it expires after the click event.
+- `<all_urls>` — required for re-injection after the armed tab navigates to a
+  new page. The `tabs.onUpdated` listener calls `browser.tabs.executeScript`
+  outside of a user-gesture context, so `activeTab` does not apply there; a
+  host permission is needed instead. Without it, navigation would silently
+  leave the content script uninstalled while the badge still shows ON (or
+  disarm the tab, depending on the error path).
+- `tabs` — grants access to tab metadata needed by `browser.tabs.sendMessage`
+  and `browser.tabs.executeScript`.
 
 **Design constraint:** the extension code is intentionally minimal and dumb.
 Semantic validation (allowed methods, URL policy, etc.) belongs in the Java host
@@ -147,7 +163,27 @@ javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
 
+## Security model
+
+The host binds to `localhost` only, so it is not reachable from other machines.
+However, **any process on the local machine that can reach `localhost:9919`**
+can send requests and have them executed in the currently armed browser tab —
+including other applications, scripts, and (on a multi-user system) other
+users. There is no authentication.
+
+This is an accepted trade-off for a personal single-user tool on a
+single-user machine. Do not run the native host on shared or multi-user
+infrastructure.
+
 ## Known limitations
+
+- **Single caller at a time.** The host handles one TCP connection at a time.
+  While waiting for Firefox to respond to a request — or simply waiting for the
+  current caller to send its next line — no other caller can connect or be
+  served. An idle open socket monopolises the service. For single-user
+  personal-tool use this is fine; use short-lived connections (connect, send
+  one request, read the response, disconnect) if multiple callers need to
+  interleave.
 
 - **Single-line JSON only.** The caller-side TCP protocol is newline-delimited.
   Each line is validated independently; a line that does not form a complete
