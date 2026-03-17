@@ -158,7 +158,7 @@ You should receive a single JSON line with `status`, `headers`, and `body`.
 # Compile
 javac -d out src/*.java
 
-# Run the test suite (63 tests, no external dependencies)
+# Run the test suite (64 tests, no external dependencies)
 javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
@@ -212,6 +212,15 @@ infrastructure.
   spec — but this only works if the target server responds with
   `Access-Control-Allow-Credentials: true` and a non-wildcard origin; otherwise
   the browser blocks the response.
+
+- **Multiple `Set-Cookie` response headers are deduplicated.** `content_script.js`
+  stores response headers in a plain JavaScript object. The Fetch API combines
+  most duplicate header values with `, ` before they reach `forEach`, but
+  `Set-Cookie` is an exception: each cookie arrives as a separate call. Because
+  the object assignment `headers[name] = value` overwrites on each call, only
+  the last cookie value is kept. For typical data-extraction requests this is
+  irrelevant; for responses that set multiple cookies in one reply, all but the
+  last are silently dropped.
 
 - **Response body is always UTF-8 text.** `content_script.js` reads the
   response body with `response.text()`, which the Fetch specification always
