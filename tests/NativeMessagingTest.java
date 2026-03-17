@@ -39,8 +39,26 @@ public class NativeMessagingTest {
         });
 
         TestRunner.test("round-trip: JSON with non-ASCII (UTF-8) characters", () -> {
-            // Czech characters — common in real-world API responses
             String msg = "{\"name\":\"Řehoř Čapek\",\"city\":\"Brno\"}";
+            Assert.equal(msg, writeAndRead(msg));
+        });
+
+        TestRunner.test("round-trip: full request with all fields (method, url, headers, body)", () -> {
+            String msg = "{\"method\":\"POST\",\"url\":\"/api/v3/cart\","
+                    + "\"headers\":{\"Content-Type\":\"application/json\",\"X-CSRF-Token\":\"abc123\"},"
+                    + "\"body\":\"{\\\"productId\\\":42,\\\"qty\\\":1}\"}";
+            Assert.equal(msg, writeAndRead(msg));
+        });
+
+        TestRunner.test("round-trip: full response with status, headers, and body", () -> {
+            String msg = "{\"status\":200,\"statusText\":\"OK\","
+                    + "\"headers\":{\"content-type\":\"application/json\",\"x-request-id\":\"xyz\"},"
+                    + "\"body\":\"{\\\"id\\\":42,\\\"name\\\":\\\"Widget\\\"}\"}";
+            Assert.equal(msg, writeAndRead(msg));
+        });
+
+        TestRunner.test("round-trip: non-2xx status code (404) in response", () -> {
+            String msg = "{\"status\":404,\"statusText\":\"Not Found\",\"headers\":{},\"body\":\"not found\"}";
             Assert.equal(msg, writeAndRead(msg));
         });
 
@@ -77,37 +95,45 @@ public class NativeMessagingTest {
         });
 
         TestRunner.test("read returns null on EOF mid-header (partial length header)", () -> {
-            // Only 3 of the 4 length bytes arrive — connection dropped mid-header
             byte[] truncated = {0x0A, 0x00, 0x00};
             Assert.isNull(NativeMessaging.read(new ByteArrayInputStream(truncated)),
                     "expected null on truncated length header");
         });
 
         TestRunner.test("read returns null on EOF mid-payload (truncated payload)", () -> {
-            // Header promises 10 bytes but stream ends after 5
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             buf.write(new byte[]{10, 0, 0, 0}); // length header: 10
-            buf.write(new byte[]{1, 2, 3, 4, 5}); // only 5 payload bytes
+            buf.write(new byte[]{1, 2, 3, 4, 5}); // only 5 of the promised 10 bytes
             Assert.isNull(NativeMessaging.read(new ByteArrayInputStream(buf.toByteArray())),
                     "expected null on truncated payload");
         });
 
         TestRunner.test("read: zero-length message (header = 0) returns empty string", () -> {
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            buf.write(new byte[]{0, 0, 0, 0}); // length = 0
-            // no payload bytes
+            buf.write(new byte[]{0, 0, 0, 0});
             Assert.equal("", NativeMessaging.read(new ByteArrayInputStream(buf.toByteArray())));
+        });
+
+        TestRunner.test("read: negative length (high bit set in header) returns null, does not throw", () -> {
+            // The protocol uses uint32 but Java's int is signed.
+            // A length with the high bit set (> 2^31-1) appears negative in Java.
+            // readNBytes() would throw IllegalArgumentException on a negative argument,
+            // so we must detect and handle this before calling it.
+            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            buf.write(new byte[]{0x00, 0x00, 0x00, (byte) 0x80}); // 0x80000000 = -2147483648
+            buf.write(new byte[]{1, 2, 3}); // some junk payload bytes
+            Assert.isNull(NativeMessaging.read(new ByteArrayInputStream(buf.toByteArray())),
+                    "expected null for malformed header with negative length");
         });
 
         // ── Byte order and size encoding ──────────────────────────────────────
 
         TestRunner.test("length header byte order is little-endian (1-byte payload)", () -> {
-            // Payload "X" = 1 byte → header must be [0x01, 0x00, 0x00, 0x00]
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             NativeMessaging.write(buf, "X");
             byte[] raw = buf.toByteArray();
 
-            Assert.equal((byte) 0x01, raw[0]); // LSB first
+            Assert.equal((byte) 0x01, raw[0]);
             Assert.equal((byte) 0x00, raw[1]);
             Assert.equal((byte) 0x00, raw[2]);
             Assert.equal((byte) 0x00, raw[3]);
@@ -115,7 +141,6 @@ public class NativeMessagingTest {
         });
 
         TestRunner.test("length header encodes 256-byte payload correctly", () -> {
-            // 256 = 0x00000100 → little-endian: [0x00, 0x01, 0x00, 0x00]
             char[] chars = new char[256];
             Arrays.fill(chars, 'A');
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
@@ -129,8 +154,7 @@ public class NativeMessagingTest {
         });
 
         TestRunner.test("length header uses UTF-8 byte count, not character count", () -> {
-            // '€' (U+20AC) encodes to 3 UTF-8 bytes: E2 82 AC
-            // 10 '€' chars = 10 characters but 30 UTF-8 bytes
+            // '€' (U+20AC) = 3 UTF-8 bytes; 10 chars → 30 bytes
             char[] chars = new char[10];
             Arrays.fill(chars, '€');
             String msg = new String(chars);
@@ -140,18 +164,18 @@ public class NativeMessagingTest {
             byte[] raw = buf.toByteArray();
 
             int encodedLen = ByteBuffer.wrap(raw, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-            Assert.equal(30, encodedLen); // byte count (30), not char count (10)
-            Assert.equal(msg, writeAndRead(msg)); // and round-trip is correct
+            Assert.equal(30, encodedLen);
+            Assert.equal(msg, writeAndRead(msg));
         });
 
         // ── Size limit ────────────────────────────────────────────────────────
 
         TestRunner.test("write: payload exactly at 1 MB limit succeeds", () -> {
-            // 1 048 576 = 0x00100000 → little-endian: [0x00, 0x00, 0x10, 0x00]
+            // 1 048 576 = 0x00100000 → little-endian bytes: [0x00, 0x00, 0x10, 0x00]
             char[] chars = new char[NativeMessaging.MAX_MESSAGE_BYTES];
             Arrays.fill(chars, 'x');
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
-            NativeMessaging.write(buf, new String(chars)); // must not throw
+            NativeMessaging.write(buf, new String(chars));
 
             byte[] raw = buf.toByteArray();
             Assert.equal((byte) 0x00, raw[0]);
@@ -174,8 +198,6 @@ public class NativeMessagingTest {
         // ── Flush behaviour ───────────────────────────────────────────────────
 
         TestRunner.test("write flushes: reader on piped stream unblocks immediately", () -> {
-            // PipedInputStream blocks until data is available. This verifies that
-            // write() calls flush() so the reader does not have to.
             PipedOutputStream pout = new PipedOutputStream();
             PipedInputStream  pin  = new PipedInputStream(pout, 65536);
 

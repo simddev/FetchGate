@@ -24,11 +24,19 @@ public class NativeHostTest {
 
         TestRunner.test("server binds to loopback address only", () -> {
             try (Fixture f = new Fixture()) {
-                // Connecting via 127.0.0.1 must succeed
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort())) {
                     Assert.isTrue(s.isConnected(), "should connect on 127.0.0.1");
                 }
             }
+        });
+
+        TestRunner.test("getBoundPort() returns -1 before start()", () -> {
+            PipedOutputStream pout = new PipedOutputStream();
+            PipedInputStream  pin  = new PipedInputStream(pout, 1024);
+            NativeHost host = new NativeHost(pin, pout, 0, 100);
+            Assert.equal(-1, host.getBoundPort());
+            pout.close();
+            pin.close();
         });
 
         TestRunner.test("stop() terminates the accept loop", () -> {
@@ -50,7 +58,7 @@ public class NativeHostTest {
             PipedOutputStream pout = new PipedOutputStream();
             PipedInputStream  pin  = new PipedInputStream(pout, 1024);
             NativeHost host = new NativeHost(pin, pout, 0, 100);
-            host.stop(); // called before start() — must not throw
+            host.stop();
             pout.close();
             pin.close();
         });
@@ -58,36 +66,79 @@ public class NativeHostTest {
         TestRunner.test("stop() is idempotent — calling it twice does not throw", () -> {
             try (Fixture f = new Fixture()) {
                 f.host.stop();
-                f.host.stop(); // second call must be harmless
+                f.host.stop();
             }
         });
 
-        // ── Request/response flow ─────────────────────────────────────────────
+        // ── Core request/response flow ────────────────────────────────────────
 
-        TestRunner.test("simple request-response round-trip", () -> {
+        TestRunner.test("simple GET request-response round-trip", () -> {
             try (Fixture f = new Fixture()) {
                 String request  = "{\"method\":\"GET\",\"url\":\"/api/v1/orders\"}";
                 String response = "{\"status\":200,\"body\":\"[]\"}";
 
                 Future<String> callerResult = f.sendAsCaller(request);
 
-                String forwarded = NativeMessaging.read(f.hostRequestReader);
-                Assert.equal(request, forwarded);
+                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
                 NativeMessaging.write(f.firefoxResponseWriter, response);
 
                 Assert.equal(response, callerResult.get(2, TimeUnit.SECONDS));
             }
         });
 
+        TestRunner.test("POST request with all fields (method, url, headers, body)", () -> {
+            // Exercises the real-world path: caller sends a full spec with body,
+            // host forwards it untouched, Firefox executes fetch() with those params.
+            try (Fixture f = new Fixture()) {
+                String request = "{\"method\":\"POST\",\"url\":\"/api/v3/cart\","
+                        + "\"headers\":{\"Content-Type\":\"application/json\","
+                        + "\"X-CSRF-Token\":\"tok123\"},"
+                        + "\"body\":\"{\\\"productId\\\":42}\"}";
+                String response = "{\"status\":201,\"statusText\":\"Created\","
+                        + "\"headers\":{\"content-type\":\"application/json\"},"
+                        + "\"body\":\"{\\\"orderId\\\":99}\"}";
+
+                Future<String> result = f.sendAsCaller(request);
+                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
+                NativeMessaging.write(f.firefoxResponseWriter, response);
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("non-2xx response (404) is returned verbatim to caller", () -> {
+            // The host must not filter or alter error responses — the caller decides
+            // what to do with a 404, 403, 500 etc.
+            try (Fixture f = new Fixture()) {
+                String response = "{\"status\":404,\"statusText\":\"Not Found\","
+                        + "\"headers\":{\"content-type\":\"text/plain\"},\"body\":\"no such resource\"}";
+
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/missing\"}");
+                NativeMessaging.read(f.hostRequestReader);
+                NativeMessaging.write(f.firefoxResponseWriter, response);
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("request with non-ASCII content is forwarded and returned correctly", () -> {
+            // Real API responses routinely contain UTF-8 text (names, addresses, etc.).
+            try (Fixture f = new Fixture()) {
+                String request  = "{\"method\":\"GET\",\"url\":\"/api/user/42\","
+                        + "\"headers\":{\"Accept-Language\":\"cs-CZ\"}}";
+                String response = "{\"status\":200,\"body\":"
+                        + "\"{\\\"name\\\":\\\"Řehoř Čapek\\\",\\\"city\\\":\\\"Brně\\\"}\"}";
+
+                Future<String> result = f.sendAsCaller(request);
+                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
+                NativeMessaging.write(f.firefoxResponseWriter, response);
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
         TestRunner.test("request forwarded to Firefox verbatim (no modification)", () -> {
             try (Fixture f = new Fixture()) {
                 String request = "{\"method\":\"POST\",\"url\":\"/submit\",\"body\":\"data\"}";
-
                 f.sendAsCaller(request);
-
-                String forwarded = NativeMessaging.read(f.hostRequestReader);
-                Assert.equal(request, forwarded);
-
+                Assert.equal(request, NativeMessaging.read(f.hostRequestReader));
                 NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
             }
         });
@@ -95,26 +146,21 @@ public class NativeHostTest {
         TestRunner.test("response forwarded to caller verbatim (no modification)", () -> {
             try (Fixture f = new Fixture()) {
                 String response = "{\"status\":403,\"statusText\":\"Forbidden\",\"body\":\"nope\"}";
-
-                Future<String> callerResult = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
                 NativeMessaging.read(f.hostRequestReader);
                 NativeMessaging.write(f.firefoxResponseWriter, response);
-
-                Assert.equal(response, callerResult.get(2, TimeUnit.SECONDS));
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
 
         TestRunner.test("response with JSON-encoded special characters forwarded correctly", () -> {
-            // JSON-encoded \n, \t, unicode — the string contains no literal newlines,
-            // so readLine() on the caller side does not truncate it.
+            // JSON-encoded \n, \t, unicode — no literal newlines, so readLine() doesn't truncate.
             try (Fixture f = new Fixture()) {
                 String response = "{\"status\":200,\"body\":\"line1\\nline2\\ttab\\u00e9\"}";
-
-                Future<String> callerResult = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
                 NativeMessaging.read(f.hostRequestReader);
                 NativeMessaging.write(f.firefoxResponseWriter, response);
-
-                Assert.equal(response, callerResult.get(2, TimeUnit.SECONDS));
+                Assert.equal(response, result.get(2, TimeUnit.SECONDS));
             }
         });
 
@@ -138,7 +184,6 @@ public class NativeHostTest {
                 for (int i = 0; i < 5; i++) {
                     String req  = "{\"seq\":" + i + ",\"url\":\"/item/" + i + "\"}";
                     String resp = "{\"status\":200,\"seq\":" + i + "}";
-
                     Future<String> result = f.sendAsCaller(req);
                     Assert.equal(req,  NativeMessaging.read(f.hostRequestReader));
                     NativeMessaging.write(f.firefoxResponseWriter, resp);
@@ -147,7 +192,7 @@ public class NativeHostTest {
             }
         });
 
-        // ── Timeout behaviour ─────────────────────────────────────────────────
+        // ── Timeout and stale state ───────────────────────────────────────────
 
         TestRunner.test("timeout: returns error JSON when Firefox does not respond", () -> {
             try (Fixture f = new Fixture()) {
@@ -166,42 +211,87 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("stale response is cleared before each new request", () -> {
-            // Scenario: req1 times out; Firefox responds late; req2 must not receive
-            // the stale response from req1.
+        TestRunner.test("stale response from timed-out request is cleared before next request", () -> {
             try (Fixture f = new Fixture()) {
                 Future<String> result1 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/first\"}");
-                NativeMessaging.read(f.hostRequestReader); // consume forwarded req1
-
-                // Wait for timeout
+                NativeMessaging.read(f.hostRequestReader);
                 Assert.contains(result1.get(TEST_TIMEOUT_MS + 1000, TimeUnit.MILLISECONDS), "timeout");
 
-                // Firefox now sends a late reply for req1 — this is the stale entry
+                // Firefox delivers a late reply for the timed-out request
                 NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200,\"body\":\"late\"}");
-                Thread.sleep(60); // give stdin-reader time to enqueue it
+                Thread.sleep(60);
 
-                // req2 must receive its own response, not the stale one
+                // The next request must receive its own response, not the stale one
                 String expected = "{\"status\":200,\"body\":\"correct\"}";
                 Future<String> result2 = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/second\"}");
                 NativeMessaging.read(f.hostRequestReader);
                 NativeMessaging.write(f.firefoxResponseWriter, expected);
-
                 Assert.equal(expected, result2.get(2, TimeUnit.SECONDS));
             }
         });
 
-        TestRunner.test("firefox disconnects during in-flight request — caller still receives error, not a hang", () -> {
-            // When Firefox disconnects mid-flight, stop() closes the server socket.
-            // The handleCaller thread is already blocked on poll() and is not interrupted,
-            // so the caller still gets a response — the timeout error — rather than hanging.
+        TestRunner.test("unsolicited Firefox message arriving between requests is cleared", () -> {
+            // Firefox could theoretically send a message when no request is in flight.
+            // The responseQueue.clear() before each request must discard it so it
+            // does not contaminate the next response.
+            try (Fixture f = new Fixture()) {
+                // No request in flight — Firefox sends something spontaneously
+                NativeMessaging.write(f.firefoxResponseWriter, "{\"unsolicited\":true}");
+                Thread.sleep(60); // let stdin-reader enqueue it
+
+                String expected = "{\"status\":200,\"body\":\"real\"}";
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
+                NativeMessaging.read(f.hostRequestReader);
+                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        // ── Failure modes ─────────────────────────────────────────────────────
+
+        TestRunner.test("oversized request (>1 MB) returns error JSON to caller, not silent EOF", () -> {
+            // If the request cannot be forwarded to Firefox (e.g. > 1MB limit),
+            // the caller must receive a descriptive error, not a sudden connection close.
+            try (Fixture f = new Fixture()) {
+                char[] body = new char[NativeMessaging.MAX_MESSAGE_BYTES]; // 1 MB of 'x'
+                Arrays.fill(body, 'x');
+                // The JSON envelope pushes this just over the 1 MB limit
+                String oversized = "{\"method\":\"POST\",\"url\":\"/\",\"body\":\"" + new String(body) + "\"}";
+
+                Future<String> result = f.sendAsCaller(oversized);
+                String reply = result.get(2, TimeUnit.SECONDS);
+
+                Assert.notNull(reply, "caller must receive a response, not a silent connection close");
+                Assert.contains(reply, "error");
+                Assert.contains(reply, "too large");
+            }
+        });
+
+        TestRunner.test("broken Firefox pipe: caller receives error JSON, not silent EOF", () -> {
+            // If the connection to Firefox dies (pipe broken), writing to nativeOut
+            // throws IOException. The caller must receive an error, not hang or get EOF.
+            try (Fixture f = new Fixture()) {
+                // Close the reading end of the NM output pipe to simulate Firefox dying
+                f.hostRequestReader.close();
+                Thread.sleep(50);
+
+                Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
+                String reply = result.get(2, TimeUnit.SECONDS);
+
+                Assert.notNull(reply, "caller must receive a response, not hang");
+                Assert.contains(reply, "error");
+            }
+        });
+
+        TestRunner.test("firefox disconnects during in-flight request — caller receives error, not a hang", () -> {
             try (Fixture f = new Fixture()) {
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
-                NativeMessaging.read(f.hostRequestReader); // consume forwarded request
+                NativeMessaging.read(f.hostRequestReader);
 
-                f.firefoxResponseWriter.close(); // simulate Firefox dying
+                f.firefoxResponseWriter.close(); // simulate Firefox dying mid-request
 
                 String reply = result.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS);
-                Assert.notNull(reply, "caller must receive a response, not hang");
+                Assert.notNull(reply, "caller must receive a response, not hang indefinitely");
                 Assert.contains(reply, "error");
             }
         });
@@ -217,11 +307,8 @@ public class NativeHostTest {
                     s.setSoTimeout(300);
                     try {
                         Assert.isNull(in.readLine(), "expected no response to blank request");
-                    } catch (SocketTimeoutException e) {
-                        // also acceptable
-                    }
+                    } catch (SocketTimeoutException e) { /* also acceptable */ }
                 }
-                // Host must still accept new connections
                 try (Socket s2 = new Socket("127.0.0.1", f.host.getBoundPort())) {
                     Assert.isTrue(s2.isConnected(), "host should still accept after blank request");
                 }
@@ -233,13 +320,11 @@ public class NativeHostTest {
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
                      PrintWriter    out = new PrintWriter(s.getOutputStream(), true);
                      BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream()))) {
-                    out.println("     "); // spaces only — isBlank() = true
+                    out.println("     ");
                     s.setSoTimeout(300);
                     try {
                         Assert.isNull(in.readLine(), "expected no response to whitespace request");
-                    } catch (SocketTimeoutException e) {
-                        // also acceptable
-                    }
+                    } catch (SocketTimeoutException e) { /* also acceptable */ }
                 }
                 try (Socket s2 = new Socket("127.0.0.1", f.host.getBoundPort())) {
                     Assert.isTrue(s2.isConnected(), "host should still accept after whitespace request");
@@ -248,60 +333,46 @@ public class NativeHostTest {
         });
 
         TestRunner.test("request with embedded newline — only first line is forwarded (protocol limitation)", () -> {
-            // The TCP caller-side protocol is newline-delimited (readLine).
-            // If a caller sends pretty-printed or otherwise multi-line JSON,
-            // only the content up to the first \n is forwarded to Firefox.
-            // This documents the known limitation: callers must send single-line JSON.
+            // The TCP caller-side protocol is newline-delimited. Callers must send
+            // compact single-line JSON. This test documents what happens if they don't.
             try (Fixture f = new Fixture()) {
                 String firstLine  = "{\"method\":\"GET\",";
                 String secondLine = "\"url\":\"/api\"}";
 
-                f.sendAsCaller(firstLine + "\n" + secondLine); // sends firstLine\nsecondLine\n
+                f.sendAsCaller(firstLine + "\n" + secondLine);
 
-                // Host reads only firstLine (stops at the embedded \n)
                 String forwarded = NativeMessaging.read(f.hostRequestReader);
                 Assert.equal(firstLine, forwarded);
 
-                // Unblock the host (it is waiting for a Firefox response for firstLine)
                 NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
             }
         });
 
         TestRunner.test("one request per connection — server closes socket after responding", () -> {
-            // handleCaller uses try-with-resources on the Socket, so the connection is
-            // closed after each response. A second readLine() on the same socket returns
-            // null (EOF).
             try (Fixture f = new Fixture()) {
-                String req  = "{\"method\":\"GET\",\"url\":\"/\"}";
-                String resp = "{\"status\":200}";
-
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
                      PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
                      BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
 
-                    out.println(req);
-                    Assert.equal(req, NativeMessaging.read(f.hostRequestReader));
-                    NativeMessaging.write(f.firefoxResponseWriter, resp);
+                    out.println("{\"method\":\"GET\",\"url\":\"/\"}");
+                    Assert.equal("{\"method\":\"GET\",\"url\":\"/\"}", NativeMessaging.read(f.hostRequestReader));
+                    NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
 
-                    // First response arrives normally
-                    Assert.equal(resp, in.readLine());
+                    Assert.equal("{\"status\":200}", in.readLine());
 
-                    // Server closed the connection — second read must return EOF
+                    // Server closes the connection after responding
                     s.setSoTimeout(500);
                     try {
                         Assert.isNull(in.readLine(), "expected EOF after server closes connection");
-                    } catch (SocketTimeoutException e) {
-                        // server may not have closed yet — acceptable; the point is no second response
-                    }
+                    } catch (SocketTimeoutException e) { /* acceptable */ }
                 }
             }
         });
 
         TestRunner.test("caller disconnect before sending — host keeps running", () -> {
             try (Fixture f = new Fixture()) {
-                new Socket("127.0.0.1", f.host.getBoundPort()).close(); // connect + immediately close
+                new Socket("127.0.0.1", f.host.getBoundPort()).close();
                 Thread.sleep(100);
-
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort())) {
                     Assert.isTrue(s.isConnected(), "host should accept after abrupt caller disconnect");
                 }
@@ -338,11 +409,9 @@ public class NativeHostTest {
         });
 
         Fixture() throws Exception {
-            // Pipe 1: test writes Firefox responses → host reads (simulates Firefox responding)
             firefoxResponseWriter = new PipedOutputStream();
             firefoxResponseReader = new PipedInputStream(firefoxResponseWriter, 65536);
 
-            // Pipe 2: host writes NM requests → test reads (simulates Firefox receiving)
             hostRequestWriter = new PipedOutputStream();
             hostRequestReader = new PipedInputStream(hostRequestWriter, 65536);
 
@@ -351,7 +420,6 @@ public class NativeHostTest {
             awaitReady();
         }
 
-        /** Send one newline-delimited JSON request over TCP; returns the response line. */
         Future<String> sendAsCaller(String requestJson) {
             return executor.submit(() -> {
                 try (Socket         s   = new Socket("127.0.0.1", host.getBoundPort());
@@ -363,7 +431,6 @@ public class NativeHostTest {
             });
         }
 
-        /** Block until the host's server socket is bound (getBoundPort() > 0). */
         private void awaitReady() throws InterruptedException {
             for (int i = 0; i < 100; i++) {
                 if (host.getBoundPort() > 0) return;
