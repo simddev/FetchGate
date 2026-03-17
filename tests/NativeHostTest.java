@@ -381,6 +381,152 @@ public class NativeHostTest {
                 }
             }
         });
+
+        // ── Sentinel and error path coverage ─────────────────────────────────
+
+        TestRunner.test("stdin-reader I/O error (not EOF) unblocks caller immediately via sentinel", () -> {
+            // If nativeIn throws an IOException mid-read (rather than returning EOF),
+            // the stdin-reader catch block must offer SHUTDOWN_SENTINEL so a waiting
+            // caller does not have to wait out the full timeout.
+            //
+            // We use a CountDownLatch-gated InputStream: it blocks until signaled,
+            // then throws — giving us control over when the 'crash' happens.
+            CountDownLatch crashLatch = new CountDownLatch(1);
+            InputStream controlled = new InputStream() {
+                @Override public int read() throws IOException { throw new IOException("unreachable"); }
+                @Override public int read(byte[] b, int off, int len) throws IOException {
+                    try { crashLatch.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                    throw new IOException("simulated pipe crash");
+                }
+            };
+
+            PipedOutputStream hostOut    = new PipedOutputStream();
+            PipedInputStream  outReader  = new PipedInputStream(hostOut, 65536);
+            NativeHost        host       = new NativeHost(controlled, hostOut, 0, TEST_TIMEOUT_MS);
+            ExecutorService   exec       = Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r); t.setDaemon(true); return t;
+            });
+            exec.submit(() -> { host.start(); return null; });
+            for (int i = 0; i < 100 && host.getBoundPort() <= 0; i++) Thread.sleep(20);
+
+            try {
+                // Caller sends a request — forwarded to Firefox via hostOut.
+                Future<String> result = exec.submit(() -> {
+                    try (Socket         s   = new Socket("127.0.0.1", host.getBoundPort());
+                         PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                         BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+                        out.println("{\"method\":\"GET\",\"url\":\"/\"}");
+                        return in.readLine();
+                    }
+                });
+                // Consume the forwarded request so the caller isn't blocked on the write side.
+                NativeMessaging.read(outReader);
+
+                // Trigger the simulated pipe crash — stdin-reader should offer sentinel.
+                long start = System.currentTimeMillis();
+                crashLatch.countDown();
+
+                String reply   = result.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS);
+                long   elapsed = System.currentTimeMillis() - start;
+
+                Assert.notNull(reply, "caller must receive a response");
+                Assert.contains(reply, "error");
+                Assert.isTrue(elapsed < TEST_TIMEOUT_MS / 2,
+                        "expected fast error via sentinel, but got delay of " + elapsed + " ms");
+            } finally {
+                host.stop();
+                exec.shutdownNow();
+                try { outReader.close(); } catch (IOException ignored) {}
+            }
+        });
+
+        TestRunner.test("timeout on persistent connection: next request on same socket succeeds", () -> {
+            // After a timed-out request, the connection stays open and a subsequent
+            // request on the same TCP socket must be served correctly.
+            try (Fixture f = new Fixture()) {
+                try (Socket         s   = new Socket("127.0.0.1", f.host.getBoundPort());
+                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+
+                    // First request: Firefox doesn't respond → timeout error.
+                    out.println("{\"method\":\"GET\",\"url\":\"/first\"}");
+                    NativeMessaging.read(f.hostRequestReader); // consume forwarded request
+                    String timedOut = in.readLine();
+                    Assert.contains(timedOut, "timeout");
+
+                    // Second request on the same socket: Firefox responds normally.
+                    String expected = "{\"status\":200,\"body\":\"recovered\"}";
+                    out.println("{\"method\":\"GET\",\"url\":\"/second\"}");
+                    NativeMessaging.read(f.hostRequestReader);
+                    NativeMessaging.write(f.firefoxResponseWriter, expected);
+                    Assert.equal(expected, in.readLine());
+                }
+            }
+        });
+
+        TestRunner.test("oversized request on persistent connection: connection closed, host keeps accepting", () -> {
+            // An oversized payload (> 1 MB) must cause the host to send an error and
+            // close that connection, but the server socket must remain open for new callers.
+            try (Fixture f = new Fixture()) {
+                char[] body = new char[NativeMessaging.MAX_MESSAGE_BYTES];
+                Arrays.fill(body, 'x');
+                String oversized = "{\"method\":\"POST\",\"url\":\"/\",\"body\":\"" + new String(body) + "\"}";
+
+                try (Socket         s   = new Socket("127.0.0.1", f.host.getBoundPort());
+                     PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                     BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
+
+                    out.println(oversized);
+                    String reply = in.readLine();
+                    Assert.contains(reply, "error");
+                    Assert.contains(reply, "too large");
+
+                    // Host should have closed the connection after a write failure.
+                    s.setSoTimeout(500);
+                    try {
+                        Assert.isNull(in.readLine(), "expected EOF — host must close connection after oversized request");
+                    } catch (SocketTimeoutException e) { /* also acceptable */ }
+                }
+
+                // Host must still serve a subsequent caller on a new connection.
+                String req      = "{\"method\":\"GET\",\"url\":\"/recovery\"}";
+                String expected = "{\"status\":200,\"body\":\"ok\"}";
+                Future<String> result = f.sendAsCaller(req);
+                Assert.equal(req, NativeMessaging.read(f.hostRequestReader));
+                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
+            }
+        });
+
+        TestRunner.test("caller disconnects mid-wait: host recovers and serves subsequent callers", () -> {
+            // If the caller closes the TCP socket while the host is blocked waiting for
+            // Firefox's response, the host must not crash — it must detect the closed
+            // socket and resume accepting new connections.
+            try (Fixture f = new Fixture()) {
+                // Caller connects and sends a request.
+                Socket     s   = new Socket("127.0.0.1", f.host.getBoundPort());
+                PrintWriter out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
+                out.println("{\"method\":\"GET\",\"url\":\"/slow\"}");
+
+                // Confirm the request was forwarded to Firefox.
+                Assert.notNull(NativeMessaging.read(f.hostRequestReader), "request must be forwarded");
+
+                // Caller disconnects abruptly while host is blocked in poll().
+                s.close();
+
+                // Firefox now responds — host's println will fail silently (PrintWriter
+                // swallows the broken-pipe error), then in.readLine() returns null → loop exits.
+                NativeMessaging.write(f.firefoxResponseWriter, "{\"status\":200}");
+                Thread.sleep(150); // let handleCaller finish and accept() resume
+
+                // Host must still accept and serve a new caller.
+                String expected = "{\"status\":201,\"body\":\"next\"}";
+                Future<String> result = f.sendAsCaller("{\"method\":\"POST\",\"url\":\"/next\"}");
+                NativeMessaging.read(f.hostRequestReader);
+                NativeMessaging.write(f.firefoxResponseWriter, expected);
+                Assert.equal(expected, result.get(2, TimeUnit.SECONDS));
+            }
+        });
     }
 
     // ── Fixture ───────────────────────────────────────────────────────────────
