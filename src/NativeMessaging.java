@@ -30,7 +30,8 @@ public class NativeMessaging {
         if (lenBuf.length < 4) return null;  // EOF mid-header
 
         int len = ByteBuffer.wrap(lenBuf).order(ByteOrder.LITTLE_ENDIAN).getInt();
-        if (len < 0) return null;  // malformed header: length > 2^31 treated as negative by Java
+        if (len < 0) return null;              // malformed: uint32 > 2^31 appears negative in Java
+        if (len > MAX_MESSAGE_BYTES) return null; // malformed: exceeds Firefox's 1 MB hard cap
         byte[] payload = in.readNBytes(len);
         if (payload.length < len) return null;  // EOF mid-payload (truncated stream)
         return new String(payload, "UTF-8");

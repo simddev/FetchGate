@@ -126,6 +126,18 @@ public class NativeMessagingTest {
                     "expected null for malformed header with negative length");
         });
 
+        TestRunner.test("read: length header exceeding 1 MB cap returns null, does not allocate", () -> {
+            // A length in the range (MAX_MESSAGE_BYTES, Integer.MAX_VALUE] is positive in Java
+            // but violates Firefox's 1 MB hard cap. Without this guard, readNBytes() would
+            // attempt to allocate and block on hundreds of MB — potentially causing OOM.
+            // 1_048_577 = MAX_MESSAGE_BYTES + 1, little-endian: 0x01 0x00 0x10 0x00
+            ByteArrayOutputStream buf = new ByteArrayOutputStream();
+            buf.write(new byte[]{0x01, 0x00, 0x10, 0x00}); // 1_048_577 in little-endian
+            buf.write(new byte[]{1, 2, 3}); // some junk payload bytes
+            Assert.isNull(NativeMessaging.read(new ByteArrayInputStream(buf.toByteArray())),
+                    "expected null for length header exceeding 1 MB cap");
+        });
+
         // ── Byte order and size encoding ──────────────────────────────────────
 
         TestRunner.test("length header byte order is little-endian (1-byte payload)", () -> {
