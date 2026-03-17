@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -150,15 +151,15 @@ public class NativeHost {
     private void handleCaller(Socket client) {
         try (client;
              BufferedReader in  = new BufferedReader(
-                                      new InputStreamReader(client.getInputStream(), "UTF-8"));
+                                      new InputStreamReader(client.getInputStream(), StandardCharsets.UTF_8));
              PrintWriter    out = new PrintWriter(
-                                      new OutputStreamWriter(client.getOutputStream(), "UTF-8"),
+                                      new OutputStreamWriter(client.getOutputStream(), StandardCharsets.UTF_8),
                                       /*autoFlush=*/ true)) {
 
             String request;
             while ((request = in.readLine()) != null) {
                 // Normalise: strip leading/trailing whitespace before any further handling.
-                // injectFgId() assumes the JSON starts with '{'; without this strip a request
+                // buildEnvelope() assumes the JSON starts with '{'; without this strip a request
                 // like " {...}" would produce {"__fg_id":N,{...}} — malformed JSON.
                 request = request.strip();
                 if (request.isBlank()) continue;
