@@ -31,8 +31,8 @@ bin/
 test/
 FetchGate.iml
 
-### IntelliJ user-specific ###
-.idea/workspace.xml
+### IntelliJ IDEA project directory ###
+.idea/
 
 ### Compiled output ###
 *.class
