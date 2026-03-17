@@ -1,0 +1,7 @@
+{
+  "name": "fetchgate",
+  "description": "FetchGate native host — proxies fetch() calls from a browser tab to an external process.",
+  "path": "/REPLACE/WITH/ABSOLUTE/PATH/TO/fetchgate.sh",
+  "type": "stdio",
+  "allowed_extensions": ["fetchgate@localhost"]
+}
