@@ -35,18 +35,28 @@ function connect() {
 // The __fg_id field injected by the native host is echoed back in every
 // response so the host can match replies to requests and discard stale ones.
 async function onRequestFromHost(request) {
-    const id = request.__fg_id;
+    const id        = request.__fg_id;
+    // Capture the port that delivered this request. The fetch() is async and may
+    // outlive the current port (e.g. if the host disconnects and reconnects before
+    // the fetch resolves). Replying to the originating port rather than the current
+    // global port prevents late replies from leaking into a newer host session.
+    const replyPort = port;
+
+    function reply(msg) {
+        if (replyPort) replyPort.postMessage(msg);
+        else console.error('[FetchGate] Cannot reply — originating port disconnected.');
+    }
 
     if (armedTabId === null) {
-        sendToHost({ __fg_id: id, error: 'no tab is armed' });
+        reply({ __fg_id: id, error: 'no tab is armed' });
         return;
     }
 
     try {
         const response = await browser.tabs.sendMessage(armedTabId, request);
-        sendToHost({ __fg_id: id, ...response });
+        reply({ __fg_id: id, ...response });
     } catch (e) {
-        sendToHost({ __fg_id: id, error: e.message });
+        reply({ __fg_id: id, error: e.message });
     }
 }
 
@@ -61,11 +71,15 @@ function sendToHost(message) {
 // ─── Tab arming ──────────────────────────────────────────────────────────────
 
 // Toolbar button clicked: toggle armed state for the current tab.
+// When the tab is armed but the native host has disconnected (ERR badge,
+// port === null), clicking the same tab re-arms rather than disarming —
+// one click reconnects instead of requiring disarm + arm.
 browser.browserAction.onClicked.addListener(async (tab) => {
-    if (armedTabId === tab.id) {
+    if (armedTabId === tab.id && port !== null) {
+        // Tab is armed and the native host is connected — toggle off.
         disarm(tab.id);
     } else {
-        // Disarm whatever was armed before (if anything).
+        // Arm, or re-arm after ERR: disarm whatever was armed first (if anything).
         if (armedTabId !== null) disarm(armedTabId);
         await arm(tab.id);
     }

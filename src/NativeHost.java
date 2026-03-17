@@ -155,22 +155,14 @@ public class NativeHost {
                 request = request.strip();
                 if (request.isBlank()) continue;
 
-                // The protocol requires JSON objects. Reject anything else cleanly rather
-                // than forwarding garbage or producing a malformed NM message.
-                if (!request.startsWith("{")) {
-                    log("Rejecting non-object request: " + truncate(request));
-                    out.println("{\"error\":\"invalid request: expected a JSON object\"}");
+                // The protocol requires complete JSON objects. Reject anything that doesn't
+                // start with '{' (not an object) or doesn't end with '}' (incomplete/truncated).
+                // injectFgId() operates on json.substring(0, length-1); requiring a closing '}'
+                // ensures it always removes the final '}' rather than arbitrary content.
+                if (!request.startsWith("{") || !request.endsWith("}")) {
+                    log("Rejecting malformed request (not a complete JSON object): " + truncate(request));
+                    out.println("{\"error\":\"invalid request: expected a complete JSON object\"}");
                     continue; // keep the connection open; the caller can retry
-                }
-
-                // __fg_id is reserved for internal reply tracking. A caller-supplied
-                // __fg_id would create a duplicate key in the forwarded JSON; JavaScript
-                // last-key-wins means background.js echoes the caller's value, not the
-                // host's, so the response never matches and the request always times out.
-                if (request.contains("\"__fg_id\":")) {
-                    log("Rejecting request with reserved field __fg_id: " + truncate(request));
-                    out.println("{\"error\":\"invalid request: __fg_id is a reserved field\"}");
-                    continue;
                 }
 
                 log("← Caller: " + truncate(request));
@@ -243,18 +235,23 @@ public class NativeHost {
 
     /**
      * Inject the internal request-tracking field into a JSON object string.
-     * Assumes json is a non-null object starting with '{'. The field is placed
-     * first so stripFgId() can remove it with a simple prefix regex.
+     * Assumes json starts with '{' and ends with '}' (enforced by the caller).
+     *
+     * The field is appended as the LAST key. JavaScript's last-key-wins semantics
+     * mean that even if the caller supplied their own __fg_id, the host's value
+     * (injected last) is the one background.js sees and echoes back — no collision
+     * detection or rejection is needed.
      *
      * Examples:
-     *   {"url":"/"}  →  {"__fg_id":1,"url":"/"}
-     *   {}            →  {"__fg_id":1}
+     *   {"url":"/"}             →  {"url":"/","__fg_id":1}
+     *   {}                      →  {"__fg_id":1}
+     *   {"__fg_id":99,"url":"/"} →  {"__fg_id":99,"url":"/","__fg_id":1}  (host's 1 wins)
      */
     private static String injectFgId(String json, int id) {
-        String field = "\"__fg_id\":" + id;
+        String suffix = ",\"__fg_id\":" + id + "}";
         return json.length() <= 2          // "{}" — empty object
-                ? "{" + field + "}"
-                : "{" + field + "," + json.substring(1);
+                ? "{\"__fg_id\":" + id + "}"
+                : json.substring(0, json.length() - 1) + suffix;
     }
 
     /**
