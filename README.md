@@ -75,12 +75,15 @@ over from a previous timed-out request, eliminating the reply-misdelivery race.
 { "method": "GET", "url": "/api/v2/user/profile", "headers": {"Accept": "application/json"} }
 ```
 
-| Field     | Required | Description                                             |
-|-----------|----------|---------------------------------------------------------|
-| `url`     | yes      | Absolute URL or path relative to the current tab origin |
-| `method`  | no       | HTTP method; defaults to `GET`                          |
-| `headers` | no       | Object of additional request headers                    |
-| `body`    | no       | Request body (for POST/PUT)                             |
+| Field         | Required | Description                                                        |
+|---------------|----------|--------------------------------------------------------------------|
+| `url`         | yes      | Absolute URL or path relative to the current tab origin            |
+| `method`      | no       | HTTP method; defaults to `GET`                                     |
+| `headers`     | no       | Object of additional request headers                               |
+| `body`        | no       | Request body (for POST/PUT)                                        |
+| `credentials` | no       | Fetch credentials mode: `"same-origin"` (default), `"include"`, or `"omit"` |
+
+`__fg_id` is a reserved field used internally for reply tracking. Requests containing this field are rejected with an error.
 
 **Response** (extension → host → caller):
 
@@ -129,7 +132,7 @@ You should receive a single JSON line with `status`, `headers`, and `body`.
 # Compile
 javac -d out src/*.java
 
-# Run the test suite (37 tests, no external dependencies)
+# Run the test suite (59 tests, no external dependencies)
 javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
@@ -148,7 +151,23 @@ java  -cp out TestRunner
   `INSTALL.md` for the persistent `.xpi` install option.
 
 - **30-second request timeout.** If the extension does not respond within 30 s
-  the host returns `{"error":"timeout: ..."}` to the caller.
+  the host returns `{"error":"timeout: ..."}` to the caller. The in-tab
+  `fetch()` is not cancelled on timeout; it continues running in the browser
+  until the network completes or fails. The stale reply is discarded by ID
+  matching but the request still consumes a browser connection slot.
+
+- **Cross-origin requests do not send credentials by default.** The default
+  `fetch()` credentials mode is `same-origin`, so cookies and auth headers are
+  only forwarded automatically for URLs on the same origin as the armed tab.
+  For cross-origin absolute URLs, add `"credentials":"include"` to the request
+  spec — but this only works if the target server responds with
+  `Access-Control-Allow-Credentials: true` and a non-wildcard origin; otherwise
+  the browser blocks the response.
+
+- **Logs may contain sensitive data.** Requests and responses are logged to
+  stderr (truncated at 120 characters). On a multi-user system these may
+  appear in terminal history or journal logs. Run the host in a dedicated
+  terminal and avoid piping stderr to persistent storage.
 
 ## Project structure
 
