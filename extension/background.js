@@ -4,7 +4,7 @@
 // This is the single source of truth.
 let armedTabId = null;
 
-// The Native Messaging port to the Java host (null = not connected).
+// The Native Messaging port to the native host (null = not connected).
 let port = null;
 
 // ─── Native Messaging ────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ async function arm(tabId) {
     browser.browserAction.setBadgeText({ text: 'ON', tabId });
     browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
 
-    // Connect to the native host on first arm (this launches the Java process).
+    // Connect to the native host on first arm (this launches the host process).
     if (!port) connect();
 
     console.log('[FetchGate] Tab armed:', tabId);
