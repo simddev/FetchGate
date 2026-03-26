@@ -115,6 +115,9 @@ class FetchGate:
         self._out.flush()
 
     def _read(self) -> Optional[dict]:
+        # sys.stdin.buffer is a BufferedReader; BufferedReader.read(n) blocks
+        # until exactly n bytes are available (non-interactive pipe), so short
+        # reads only occur on genuine EOF — not on partial arrival.
         header = self._in.read(4)
         if len(header) < 4:
             return None  # EOF — Firefox closed the connection
