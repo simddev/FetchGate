@@ -39,7 +39,7 @@ e.g. `~/bin/fetchgate.sh`):
 
 ```bash
 #!/bin/bash
-exec java -cp /absolute/path/to/FetchGate/out Main
+exec java -cp "/absolute/path/to/FetchGate/out" Main
 ```
 
 Replace the path with the real absolute path to your project directory. Then
