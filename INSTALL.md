@@ -216,7 +216,7 @@ Open the extension's background console:
 
 You should see messages like:
 ```
-[FetchGate] Connected to native host.
+[FetchGate] Connecting to native host...
 [FetchGate] Tab armed: 42
 ```
 
