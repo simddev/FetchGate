@@ -7,7 +7,7 @@ Firefox extension; you pick one based on how you want to call it.
 
 | | Java host | Python host |
 |---|---|---|
-| Requires | JDK 21+ | Python 3.6+ |
+| Requires | JDK 21+, **or Docker** | Python 3.6+ |
 | How your code calls it | Connect to `localhost:9919` from any language | Your Python script IS the host; Firefox launches it |
 | Persistent server | Yes — stays running until Firefox exits | No — script runs once and exits |
 | Good for | Multi-script workflows, any language, interactive use | A single Python script with a specific job |
@@ -21,7 +21,14 @@ extension.
 
 ## Java host
 
-### 1. Compile
+You can run the Java host either directly (requires JDK 21+) or via Docker
+(no JDK needed).
+
+---
+
+### Option A — Run directly (JDK required)
+
+#### 1. Compile
 
 From the project root:
 
@@ -31,7 +38,7 @@ javac -d out src/*.java
 
 Class files land in `out/`. Requires JDK 21+.
 
-### 2. Create the launcher script
+#### 2. Create the launcher script
 
 Firefox cannot invoke `.class` files directly — the native messaging manifest
 must point to an executable. Create a small shell wrapper (anywhere permanent,
@@ -52,7 +59,48 @@ chmod +x ~/bin/fetchgate.sh
 The `exec` replaces the shell with the Java process so no lingering wrapper
 process is left behind.
 
-### 3. Register the native host
+---
+
+### Option B — Run via Docker (no JDK required)
+
+Docker handles compilation and the Java runtime. The container shares the
+host's network stack (`--network=host`) so the TCP server on `localhost:9919`
+is reachable exactly like the direct installation. Linux only (matches this
+project's target platform).
+
+#### 1. Build the image
+
+From the project root:
+
+```bash
+docker build -t fetchgate .
+```
+
+This compiles the Java source inside the build stage and produces a lean JRE
+image. You only need to re-run this if the source files change.
+
+#### 2. Create the launcher script
+
+Create `~/bin/fetchgate.sh`:
+
+```bash
+#!/bin/bash
+exec docker run --rm -i --network=host fetchgate
+```
+
+Then make it executable:
+
+```bash
+chmod +x ~/bin/fetchgate.sh
+```
+
+`--rm` removes the container automatically when Firefox closes the Native
+Messaging connection. `-i` keeps stdin open for the NM framing. `--network=host`
+makes `localhost:9919` inside the container identical to the host's loopback.
+
+---
+
+### 3. Register the native host (same for both options)
 
 Create the directory if it does not exist:
 
