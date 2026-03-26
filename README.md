@@ -28,7 +28,7 @@ the extension and your code. Two implementations are provided:
 | | Java host | Python host |
 |---|---|---|
 | Location | `src/` | `host_py/` |
-| Requires | JDK 21+ | Python 3.6+ |
+| Requires | JDK 21+, **or Docker** | Python 3.6+ |
 | How it works | Persistent TCP server on `localhost:9919`; any caller connects to it | Firefox launches your Python script directly; the script IS the host |
 | Good for | Callers in any language, interactive use, multiple scripts | A single Python script that does a specific job |
 | Start it | Firefox starts it automatically on first arm | Firefox starts it automatically when you arm a tab |
@@ -158,16 +158,23 @@ Errors are returned as `{ "error": "..." }` rather than thrown.
 
 - GNU/Linux
 - Firefox, Firefox Developer Edition, Firefox Nightly, or LibreWolf
-- **Java host:** JDK 21+
+- **Java host:** JDK 21+, **or Docker** (no JDK needed — the image compiles and runs the host)
 - **Python host:** Python 3.6+
 
 ## Installation
 
 Full step-by-step instructions for both hosts are in **[INSTALL.md](INSTALL.md)**.
 
-**Java host — quick summary:**
+**Java host — quick summary (JDK):**
 1. `javac -d out src/*.java`
 2. Create `~/bin/fetchgate.sh` pointing at the compiled classes; `chmod +x` it
+3. Copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
+   and set `"path"` to your launcher script
+4. Load the extension via `about:debugging → Load Temporary Add-on`
+
+**Java host — quick summary (Docker, no JDK required):**
+1. `docker build -t fetchgate .`
+2. Create `~/bin/fetchgate.sh` containing `exec docker run --rm -i --network=host fetchgate`; `chmod +x` it
 3. Copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
    and set `"path"` to your launcher script
 4. Load the extension via `about:debugging → Load Temporary Add-on`
@@ -358,6 +365,7 @@ tests/                  Java test suite (no external framework)
   NativeMessagingTest.java  NM framing protocol tests
   NativeHostTest.java       TCP↔NM bridge and request lifecycle tests
 
+Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python host
 INSTALL.md              Step-by-step installation guide
