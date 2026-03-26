@@ -15,8 +15,8 @@ function connect() {
     // A message from the host is a fetch request from the external caller.
     port.onMessage.addListener(onRequestFromHost);
 
-    port.onDisconnect.addListener(() => {
-        const err = browser.runtime.lastError;
+    port.onDisconnect.addListener((p) => {
+        const err = p.error;
         console.log('[FetchGate] Native host disconnected.',
                     err ? err.message : '');
         port = null;

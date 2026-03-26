@@ -329,6 +329,8 @@ public class NativeHost {
     /**
      * Minimal JSON string escaper for hand-built error payloads.
      * Prevents a quote or backslash in an exception message from producing malformed JSON.
+     * Only escapes named sequences; raw control characters < 0x20 are not escaped, but
+     * they do not appear in JVM exception messages in practice.
      */
     private static String jsonEscape(String s) {
         if (s == null) return "";

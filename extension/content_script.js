@@ -24,6 +24,8 @@ async function executeFetch(spec) {
         const url = new URL(spec.url, location.href).href;
         const response = await fetch(url, init);
 
+        // Headers with multiple values (e.g. Set-Cookie) are collapsed to the
+        // last value. Sufficient for JSON/HTML API use cases.
         const headers = {};
         response.headers.forEach((value, name) => { headers[name] = value; });
 
