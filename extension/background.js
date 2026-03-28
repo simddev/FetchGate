@@ -12,7 +12,7 @@ let port = null;
 function connect() {
     port = browser.runtime.connectNative('fetchgate');
 
-    // A message from the host is a fetch request from the external caller.
+    // A message from the host is a request (fetch or JS mode) from the external caller.
     port.onMessage.addListener(onRequestFromHost);
 
     port.onDisconnect.addListener((p) => {
