@@ -2,7 +2,7 @@
   "manifest_version": 2,
   "name": "FetchGate",
   "version": "0.1.0",
-  "description": "Proxy authenticated fetch() calls from an active browser tab to an external process.",
+  "description": "Bridge an external process to a live browser tab — run authenticated fetch() calls or arbitrary JavaScript inside the tab, inheriting its full session state.",
 
   "permissions": [
     "nativeMessaging",
