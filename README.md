@@ -131,7 +131,12 @@ result.
 
 ## Message format
 
-**Request** (from your code to the extension):
+There are two request modes: **fetch** and **js**. The presence of `"js"` selects
+JS mode; otherwise fetch mode is used.
+
+### Fetch mode
+
+Run a `fetch()` call inside the tab and return the full HTTP response.
 
 ```json
 { "method": "GET", "url": "/api/v2/user/profile", "headers": {"Accept": "application/json"} }
@@ -145,14 +150,42 @@ result.
 | `body` | no | Request body string (for POST, PUT, etc.) |
 | `credentials` | no | `"same-origin"` (default), `"include"`, or `"omit"` |
 
-**Response** (from the extension back to your code):
+Response:
 
 ```json
 { "status": 200, "statusText": "OK", "headers": {"content-type": "application/json"}, "body": "..." }
 ```
 
-The `body` field is always a string — parse it according to `content-type`.
-Errors are returned as `{ "error": "..." }` rather than thrown.
+`body` is always a string — parse it according to `content-type`.
+
+### JS mode
+
+Execute arbitrary JavaScript in the tab context and return the result.
+
+```json
+{ "js": "const r = await fetch('/api/orders'); const d = await r.json(); return d;" }
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `js` | yes | JavaScript code to execute (function body — may use `await` and `return`) |
+
+The code runs as the body of an `async` function. Use `return` to pass a value
+back to the caller. Strings are returned as-is; all other values are
+`JSON.stringify`'d. No `return` (or `return` with no value) yields an empty string.
+
+Response:
+
+```json
+{ "result": "..." }
+```
+
+**Isolated world:** the code runs in the content script's sandbox. It has full
+access to the DOM and `fetch()` (inheriting the tab's cookies and session state),
+but cannot read JavaScript variables set by the page's own scripts
+(e.g. `window.angular`, `window.__PRELOADED_STATE__`).
+
+Errors are returned as `{ "error": "..." }` in both modes rather than thrown.
 
 ## Requirements
 

@@ -6,9 +6,51 @@ if (!window.__fetchGateInstalled) {
     window.__fetchGateInstalled = true;
 
     browser.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-        executeFetch(request).then(sendResponse);
+        const work = (request.js != null) ? executeJs(request) : executeFetch(request);
+        work.then(sendResponse);
         return true; // keep the message channel open while the Promise resolves
     });
+}
+
+async function executeJs(spec) {
+    try {
+        // Execute the caller's code as the body of an async function.
+        // This allows multi-statement code, top-level await, and explicit return.
+        // Runs in the content script's isolated world: full DOM and fetch() access
+        // (inheriting the tab's cookies and session state), but cannot read
+        // page-level JavaScript variables set by the site's own scripts.
+        const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+        const fn = new AsyncFunction(spec.js);
+        const result = await fn();
+
+        // Serialize the result. Strings pass through as-is; everything else is
+        // JSON.stringify'd so structured data (objects, arrays, numbers) round-trips
+        // cleanly. undefined (no return statement) becomes an empty string.
+        let serialized;
+        if (result === undefined) {
+            serialized = '';
+        } else if (typeof result === 'string') {
+            serialized = result;
+        } else {
+            try {
+                serialized = JSON.stringify(result);
+            } catch (e) {
+                return { error: 'result could not be serialized: ' + e.message };
+            }
+        }
+
+        const reply = { result: serialized };
+
+        const NM_LIMIT_BYTES = 1_000_000;
+        const replyBytes = new TextEncoder().encode(JSON.stringify(reply)).byteLength;
+        if (replyBytes > NM_LIMIT_BYTES) {
+            return { error: `result too large (${replyBytes} bytes serialized; Native Messaging limit is 1 MB)` };
+        }
+
+        return reply;
+    } catch (e) {
+        return { error: e.message };
+    }
 }
 
 async function executeFetch(spec) {
