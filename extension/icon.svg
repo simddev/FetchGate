@@ -3,20 +3,18 @@
 
   <!-- Orange arrow shaft — drawn first so the left gate post overlays it,
        giving the impression the arrow is entering from the left. -->
-  <rect x="0" y="20" width="42" height="8" rx="1" fill="#EA580C"/>
+  <rect x="0" y="20" width="38" height="8" rx="1" fill="#EA580C"/>
 
-  <!-- Blue gate: left post (7px wide), right post (7px wide), top crossbeam (7px tall).
-       Right post kept at x=33 so its right edge aligns with the arrowhead base (x=40). -->
-  <rect x="5"  y="5" width="7"  height="38" rx="2" fill="#2563EB"/>
-  <rect x="33" y="5" width="7"  height="38" rx="2" fill="#2563EB"/>
-  <rect x="5"  y="5" width="35" height="7"  rx="2" fill="#2563EB"/>
+  <!-- Blue gate: posts 11px wide, crossbeam 11px tall, gap 9px.
+       Left post x=5–16, right post x=25–36, gap x=16–25. -->
+  <rect x="5"  y="5" width="11" height="38" rx="2" fill="#2563EB"/>
+  <rect x="25" y="5" width="11" height="38" rx="2" fill="#2563EB"/>
+  <rect x="5"  y="5" width="31" height="11" rx="2" fill="#2563EB"/>
 
   <!-- Right portion of shaft — drawn after the gate so it overlaps the right
-       post, connecting shaft to arrowhead and showing the arrow exiting.
-       Starts 2px before the right post (x=33) to cover anti-aliasing seam. -->
-  <rect x="31" y="20" width="11" height="8" fill="#EA580C"/>
+       post. Starts 2px before the right post (x=25) to cover anti-aliasing. -->
+  <rect x="23" y="20" width="15" height="8" fill="#EA580C"/>
 
-  <!-- Arrowhead — drawn last, clearly in front of the right post.
-       Taller (y=13–35) to stay proportional with the wider shaft. -->
-  <polygon points="40,13 48,24 40,35" fill="#EA580C"/>
+  <!-- Arrowhead — base aligned to right post's right edge (x=36). -->
+  <polygon points="36,13 48,24 36,35" fill="#EA580C"/>
 </svg>
