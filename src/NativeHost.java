@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Request lifecycle:
  *
  *   caller --TCP--> host --NM stdout--> Firefox/background --tabs.sendMessage-->
- *   content_script --fetch()--> response --NM stdin--> host --TCP--> caller
+ *   content_script --fetch() or JS exec--> result --NM stdin--> host --TCP--> caller
  */
 public class NativeHost {
 
