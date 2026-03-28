@@ -118,7 +118,8 @@ caller's JSON serialised as a string — `background.js` calls
 validation inside the JavaScript engine and ensures `__fg_id` appears only in
 the outer layer, eliminating false-positive response matching. `background.js`
 echoes `__fg_id` in every reply; the host matches by ID and discards stale
-replies left over from timed-out requests.
+replies left over from timed-out requests. Both fetch mode and JS mode use this
+same envelope — only the contents of `req` differ (`{"url":...}` vs `{"js":...}`).
 
 **Extension permissions:**
 - `nativeMessaging` — required to call `browser.runtime.connectNative()`.

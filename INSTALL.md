@@ -170,7 +170,17 @@ fg = FetchGate()
 ```
 
 Everything after `fg = FetchGate()` is your code. Use `fg.fetch(spec)` to
-send requests and get responses.
+send requests and get responses. Two modes are available:
+
+```python
+# Fetch mode — run an authenticated HTTP request and get the response
+resp = fg.fetch({"method": "GET", "url": "/api/data"})
+print(resp["status"], resp["body"])
+
+# JS mode — run arbitrary JavaScript in the tab and get the return value
+resp = fg.fetch({"js": "return document.title"})
+print(resp["result"])
+```
 
 > **stdout is redirected.** After `FetchGate()` is constructed, `sys.stdout`
 > is redirected to `sys.stderr` to prevent accidental `print()` calls from
