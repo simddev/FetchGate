@@ -33,6 +33,7 @@ fg = FetchGate()
 # --- put your fetch calls below ---
 
 try:
+    # ── Fetch mode: run fetch() in the tab ────────────────────────────────────
     resp = fg.fetch({"method": "GET", "url": "/robots.txt"})
 
     if "error" in resp:
@@ -47,6 +48,25 @@ try:
     # sys.stdout redirect that FetchGate() performs.
     sys.__stdout__.write(resp["body"])
     sys.__stdout__.flush()
+
+    # ── JS mode: execute arbitrary JavaScript in the tab ─────────────────────
+    # Use this to access APIs, read the DOM, or run any async code.
+    # The code runs as an async function body — use return and await freely.
+    js_resp = fg.fetch({"js": """
+        const r = await fetch('/robots.txt');
+        const text = await r.text();
+        return text;
+    """})
+
+    if "error" in js_resp:
+        print(f"JS error: {js_resp['error']}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"JS result length: {len(js_resp['result'])} chars", file=sys.stderr)
+
+    # For JSON APIs, parse the result:
+    # import json
+    # data = json.loads(js_resp["result"])
 
 except FetchGateError as e:
     print(f"Connection lost: {e}", file=sys.stderr)

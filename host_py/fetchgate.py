@@ -68,22 +68,32 @@ class FetchGate:
         sys.stdout = sys.stderr  # type: ignore[assignment]
 
     def fetch(self, spec: dict) -> dict:
-        """Send a fetch request through the armed tab and return the response.
+        """Send a request through the armed tab and return the response.
 
-        Parameters
-        ----------
-        spec : dict
-            url        (required) — absolute URL or path relative to tab origin
-            method     (optional) — HTTP method, defaults to GET
-            headers    (optional) — dict of additional request headers
-            body       (optional) — request body string (for POST/PUT)
-            credentials(optional) — "same-origin" (default), "include", "omit"
+        Two modes, selected by which key is present in spec:
 
-        Returns
-        -------
-        dict
-            On success: {"status": 200, "statusText": "OK", "headers": {...}, "body": "..."}
-            On error:   {"error": "..."}
+        Fetch mode — run fetch() in the tab and return the HTTP response:
+            spec = {
+                "url":         "/api/data",          # required; absolute or relative
+                "method":      "GET",                # optional, default GET
+                "headers":     {"Accept": "..."},    # optional
+                "body":        "...",                # optional, for POST/PUT
+                "credentials": "same-origin",        # optional
+            }
+            Returns: {"status": 200, "statusText": "OK", "headers": {...}, "body": "..."}
+            body is always a string — parse it with json.loads() if needed.
+
+        JS mode — execute arbitrary JavaScript and return the result:
+            spec = {"js": "return document.title"}
+            spec = {"js": "const r = await fetch('/api'); return await r.json();"}
+            Returns: {"result": "..."}
+            Strings pass through as-is; all other values are JSON.stringify'd.
+            Code with no return (or bare return) yields {"result": ""}.
+            Runs in the content script's isolated world: full DOM and fetch()
+            access (tab cookies/session inherited), but cannot read page-level
+            JS variables set by the site's own scripts.
+
+        Both modes return {"error": "..."} on failure rather than raising.
 
         Raises
         ------
