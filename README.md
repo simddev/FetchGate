@@ -386,6 +386,8 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   even if `Content-Type` correctly declares the encoding. The practical impact
   is low: the overwhelming majority of modern sites serve UTF-8.
 
+- **Infinite loops in JS mode hang the tab.** JavaScript executed via JS mode runs on the browser's main thread inside the tab. If the code contains an infinite loop, the tab becomes unresponsive and cannot serve further requests. The Java host will return a timeout error after 30 seconds, but the loop keeps running until the user navigates away from or closes the tab. The Python host will block indefinitely. There is no way for the extension to interrupt running JavaScript.
+
 - **Logs may contain sensitive data. *(Java host only)*** The Java host logs
   every request and response to stderr, truncated at 120 characters. On a
   multi-user system this output may be visible in terminal history or system
