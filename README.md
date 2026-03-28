@@ -1,22 +1,32 @@
 # FetchGate
 
-A Firefox/LibreWolf WebExtension that lets an external process execute
-authenticated `fetch()` calls through a live, logged-in browser tab.
+A Firefox/LibreWolf WebExtension that bridges an external process to a live,
+logged-in browser tab — execute authenticated HTTP requests or run arbitrary
+JavaScript inside the tab, inheriting its full session state.
 
 ## What it does
 
 When you are logged into a website, the browser holds session state — cookies,
 tokens, TLS client certificates — that is not directly accessible to an external
-program. FetchGate bridges that gap: your code sends a request spec to the
-extension, which executes the corresponding `fetch()` inside the active tab and
-returns the full HTTP response: status code, headers, and body.
+program. FetchGate bridges that gap by turning an armed browser tab into a
+programmable endpoint for your code.
 
-Because the fetch runs inside the tab's JavaScript context, it inherits
-everything the browser already has for that site. No credentials need to be
-extracted or replayed.
+Two modes are supported:
+
+**Fetch mode** — your code sends a request spec; the extension executes the
+corresponding `fetch()` inside the active tab and returns the full HTTP response:
+status code, headers, and body. Because the request runs inside the tab's
+JavaScript context, it inherits all session state automatically. No credentials
+need to be extracted or replayed.
+
+**JS mode** — your code sends a JavaScript snippet; the extension executes it as
+an `async` function body inside the tab and returns the result. This lets you do
+anything the tab's JavaScript context can do: traverse the DOM, call internal
+APIs that are not reachable from outside the browser, aggregate data across
+multiple requests, or run logic that depends on live page state.
 
 **Target use case:** extracting your own data from websites that have accounts
-but no API, or that block third-party HTTP clients.
+but no public API, or that actively block third-party HTTP clients.
 
 **Platform:** GNU/Linux only.
 
@@ -57,7 +67,7 @@ background.js
     │
     ▼
 content_script.js
-    └─ runs fetch() in the tab, returns response up the chain
+    └─ runs fetch() or arbitrary JS in the tab, returns result up the chain
 ```
 
 Firefox launches the Java host automatically when you arm the first tab. It
@@ -80,7 +90,7 @@ background.js
     │
     ▼
 content_script.js
-    └─ runs fetch() in the tab, returns response up the chain
+    └─ runs fetch() or arbitrary JS in the tab, returns result up the chain
 ```
 
 Firefox launches your Python script when you arm a tab. The script calls
@@ -124,10 +134,10 @@ replies left over from timed-out requests.
   FetchGate uses to detect when a navigation has completed and re-inject the
   content script.
 
-**Design constraint:** the extension is intentionally minimal. Semantic
-validation (allowed methods, URL policy, header filtering) belongs in the native
-host or the caller. The extension's only job is to run `fetch()` and return the
-result.
+**Design constraint:** the extension is intentionally minimal. Its only job is
+to execute what the native host asks — a `fetch()` call or a JavaScript snippet
+— and return the result. Semantic validation, error handling, and business logic
+belong in the native host or the caller.
 
 ## Message format
 
@@ -260,6 +270,12 @@ resp = fg.fetch({"method": "GET", "url": "/api/data"})
 if "error" not in resp:
     sys.__stdout__.write(resp["body"])
     sys.__stdout__.flush()
+
+# JS mode — run arbitrary JavaScript in the tab
+resp = fg.fetch({"js": "const r = await fetch('/api/orders'); return r.json();"})
+if "error" not in resp:
+    sys.__stdout__.write(resp["result"])
+    sys.__stdout__.flush()
 ```
 
 Click the toolbar button again to re-run the script.
@@ -391,7 +407,7 @@ host_py/                Python native host (direct — no TCP)
 extension/              WebExtension — shared by both hosts, never changes
   manifest.json         MV2 manifest; extension ID: fetchgate@localhost
   background.js         Armed-tab state, connectNative(), message routing
-  content_script.js     Executes fetch() in the tab, returns the response
+  content_script.js     Executes fetch() or arbitrary JS in the tab, returns the result
 
 tests/                  Java test suite (no external framework)
   TestRunner.java       Runner and output harness
