@@ -336,10 +336,11 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   even if `Content-Type` correctly declares the encoding. The practical impact
   is low: the overwhelming majority of modern sites serve UTF-8.
 
-- **Logs may contain sensitive data.** Both hosts log requests and responses to
-  stderr, truncated at 120 characters. On a multi-user system this output may
-  be visible in terminal history or system journals. Run the host in a dedicated
-  terminal; do not pipe stderr to persistent storage.
+- **Logs may contain sensitive data. *(Java host only)*** The Java host logs
+  every request and response to stderr, truncated at 120 characters. On a
+  multi-user system this output may be visible in terminal history or system
+  journals. Run the host in a dedicated terminal; do not pipe stderr to
+  persistent storage. The Python host performs no logging of its own.
 
 ## Project structure
 
