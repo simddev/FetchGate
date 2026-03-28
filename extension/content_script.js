@@ -19,9 +19,21 @@ async function executeJs(spec) {
         // Runs in the content script's isolated world: full DOM and fetch() access
         // (inheriting the tab's cookies and session state), but cannot read
         // page-level JavaScript variables set by the site's own scripts.
+        //
+        // fetch() in a content script sandbox does not resolve relative URLs
+        // automatically — the same limitation as in executeFetch (see comment
+        // there). Provide a wrapped fetch as a named parameter so that user code
+        // calling `fetch('/')` gets proper relative-URL resolution without needing
+        // to supply absolute URLs.
         const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-        const fn = new AsyncFunction(spec.js);
-        const result = await fn();
+        const fn = new AsyncFunction('fetch', spec.js);
+        const pageFetch = (resource, init) => {
+            if (typeof resource === 'string') {
+                resource = new URL(resource, location.href).href;
+            }
+            return window.fetch(resource, init);
+        };
+        const result = await fn(pageFetch);
 
         // Serialize the result. Strings pass through as-is; everything else is
         // JSON.stringify'd so structured data (objects, arrays, numbers) round-trips
