@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FetchGate is a Firefox/LibreWolf WebExtension that allows an external process to execute `fetch()` calls through the browser's active, authenticated tab context. The extension acts as a transparent proxy: the caller sends a request spec, the extension runs it inside the tab (inheriting cookies, session state, CORS policy), and returns the result. Target platform: GNU/Linux only.
+FetchGate is a Firefox/LibreWolf WebExtension that bridges an external process to a live, logged-in browser tab. Two modes: execute authenticated `fetch()` calls (fetch mode) or run arbitrary JavaScript (JS mode) inside the tab, inheriting its full session state. Target platform: GNU/Linux only.
 
 Use case: extracting your own data from websites that actively prevent it.
 
@@ -22,11 +22,13 @@ Java Native Host  (src/)
 Background Script (background.js)
     ↓ browser.tabs.sendMessage()
 Content Script (content_script.js)
-    — executes fetch() in tab context, inherits session state
-    ↑ returns response to background → native host → caller
+    — executes fetch() or arbitrary JS in tab context, inherits session state
+    ↑ returns result to background → native host → caller
 ```
 
 The Java host is a persistent TCP server on `localhost:9919`. Firefox launches it on the first arm. It stays running until Firefox or the Java process exits. Callers connect over TCP; one connection can send multiple requests.
+
+Can also be run via Docker (no JDK required) — see `Dockerfile` and INSTALL.md.
 
 ### Python host
 
@@ -37,11 +39,11 @@ Your Python Script  (host_py/)
 Background Script (background.js)
     ↓ browser.tabs.sendMessage()
 Content Script (content_script.js)
-    — executes fetch() in tab context
-    ↑ returns response to background → script
+    — executes fetch() or arbitrary JS in tab context
+    ↑ returns result to background → script
 ```
 
-Firefox launches the Python script when the tab is armed. The script calls `fg.fetch()` as many times as it needs and exits. No TCP port. The script IS the native host.
+Firefox launches the Python script when the tab is armed. The script calls `fg.fetch()` as many times as it needs (fetch mode or JS mode) and exits. No TCP port. The script IS the native host.
 
 ## IPC
 
@@ -51,30 +53,43 @@ Firefox Native Messaging — 4-byte little-endian length header + UTF-8 JSON pay
 ```json
 {"__fg_id": 1, "req": "{\"method\":\"GET\",\"url\":\"/\"}"}
 ```
-`__fg_id` is a per-request correlation ID. `req` is the caller's JSON serialised as a string so `background.js` can delegate structural validation to `JSON.parse()`. `background.js` echoes `__fg_id` in every reply so the host can match responses and discard stale ones.
+`__fg_id` is a per-request correlation ID. `req` is the caller's JSON serialised as a string so `background.js` can delegate structural validation to `JSON.parse()`. `background.js` echoes `__fg_id` in every reply so the host can match responses and discard stale ones. Both modes use the same envelope.
 
 **Design constraint**: Keep the extension code minimal and dumb. Do not put validation or complex logic in JavaScript. Offload all of that to the native host.
 
 ## Message Format
 
+### Fetch mode
 Request (caller → extension via native host):
 ```json
 { "method": "GET", "url": "/api/v2/user/profile", "headers": {"Accept": "application/json"} }
 ```
 
-Response (extension → caller via native host):
+Response:
 ```json
 { "status": 200, "statusText": "OK", "headers": {"content-type": "application/json"}, "body": "..." }
 ```
 
-`url` may be absolute or relative to the current tab's origin. `body` is always a string. Errors are returned as `{ "error": "..." }`.
+### JS mode
+Request:
+```json
+{ "js": "const r = await fetch('/api/orders'); return r.json();" }
+```
+
+Response:
+```json
+{ "result": "..." }
+```
+
+Strings pass through as-is; all other values are JSON.stringify'd. Errors in both modes are returned as `{ "error": "..." }`.
 
 ## Components / Deliverables
 
 - `extension/manifest.json` — WebExtension manifest (permissions: `nativeMessaging`, `activeTab`, `tabs`, `<all_urls>`)
 - `extension/background.js` — manages "armed tab" state, Native Messaging connection, routes messages to content script
-- `extension/content_script.js` — executes `fetch()` in tab context, returns response
+- `extension/content_script.js` — executes `fetch()` or arbitrary JS in tab context, returns result
 - `src/` — Java native host: TCP server on `localhost:9919`, NM framing, request lifecycle
+- `Dockerfile` — multi-stage build for Java host; no JDK needed on the host machine
 - `host_py/fetchgate.py` — Python NM client library; import and call `FetchGate().fetch()`
 - `host_py/example.py` — template Python script to copy and customise
 - `fetchgate.json` — NM manifest template for Java host
@@ -87,13 +102,16 @@ Response (extension → caller via native host):
 - Only one tab can be armed at a time; arming a second tab disarms the first
 - Request timeout: 30 seconds (Java host only; Python host has no timeout)
 - A tab being "armed" is the single source of truth held by the background script
-- Response body capped at ~800 KB (UTF-8 bytes) before the 1 MB NM limit
+- Full serialized reply capped at 1 MB (UTF-8 bytes) — measured as JSON.stringify of the entire reply object
 
 ## Build & Run
 
 ```bash
-# Java: compile
+# Java: compile directly
 javac -d out src/*.java
+# Java: run via Docker (no JDK required)
+docker build -t fetchgate .
+
 # Java: run tests (64 tests, no external dependencies)
 javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
