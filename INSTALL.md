@@ -211,7 +211,7 @@ The script must be executable (`chmod +x`) and must have a shebang line
 
 ### 3. Run it
 
-1. Navigate to the target website in Firefox/LibreWolf (log in if needed)
+1. Navigate to the target website in Firefox (log in if needed)
 2. Click the **FetchGate** toolbar button
 
 Firefox launches your script immediately when the tab is armed. The badge turns

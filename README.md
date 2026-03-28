@@ -1,6 +1,6 @@
 # FetchGate
 
-A Firefox/LibreWolf WebExtension that bridges an external process to a live,
+A Firefox WebExtension that bridges an external process to a live,
 logged-in browser tab — execute authenticated HTTP requests or run arbitrary
 JavaScript inside the tab, inheriting its full session state.
 
