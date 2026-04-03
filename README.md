@@ -426,9 +426,9 @@ INSTALL.md              Step-by-step installation guide
 
 ## License
 
-GNU General Public License v3 — see [LICENSE](LICENSE).
+GNU General Public License v3 — see [LICENSE](LICENSE).  
 
-[nm]: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging
+[nm]: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging  
 
 ## Contact
 Any inquiries, please write to:     
