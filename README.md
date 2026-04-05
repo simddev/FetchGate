@@ -35,8 +35,8 @@ but no public API, or that actively block third-party HTTP clients.
 FetchGate requires a *native host* — a process that Firefox launches to bridge
 the extension and your code. Two implementations are provided:
 
-| | Java host | Python host |
-|---|---|---|
+| | Java host | Python host |  
+|---|---|---|  
 | Location | `src/` | `host_py/` |
 | Requires | JDK 21+, **or Docker** | Python 3.6+ |
 | How it works | Persistent TCP server on `localhost:9919`; any caller connects to it | Firefox launches your Python script directly; the script IS the host |
