@@ -432,4 +432,4 @@ GNU General Public License v3 — see [LICENSE](LICENSE).
 
 ## Contact
 Any inquiries, please write to:     
-simon.d.dev@proton.me  
+simon.d.dev@proton.me
