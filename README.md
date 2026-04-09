@@ -431,5 +431,5 @@ GNU General Public License v3 — see [LICENSE](LICENSE).
 [nm]: https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/Native_messaging  
 
 ## Contact
-Any inquiries, please write to:     
-simon.d.dev@proton.me
+Any inquiries, please write to:  
+simon.d.dev@proton.me  
