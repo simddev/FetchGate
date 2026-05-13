@@ -30,7 +30,7 @@ The Java host is a persistent TCP server on `localhost:9919`. Firefox launches i
 
 Can also be run via Docker (no JDK required) — see `Dockerfile` and INSTALL.md.
 
-### Python host
+### Python host (embedded)
 
 ```
 Your Python Script  (host_py/)
@@ -44,6 +44,23 @@ Content Script (content_script.js)
 ```
 
 Firefox launches the Python script when the tab is armed. The script calls `fg.fetch()` as many times as it needs (fetch mode or JS mode) and exits. No TCP port. The script IS the native host.
+
+### Python TCP host
+
+```
+External Caller (any language)
+    ↓ newline-delimited JSON over TCP  localhost:9919
+fetchgate_tcp_host.py  (host_py/)
+    — drop-in replacement for the Java host; Firefox launches it directly
+    ↓ Firefox Native Messaging (stdin/stdout)
+Background Script (background.js)
+    ↓ browser.tabs.sendMessage()
+Content Script (content_script.js)
+    — executes fetch() or arbitrary JS in tab context
+    ↑ returns result to background → native host → caller
+```
+
+Same TCP interface as the Java host — any caller that works with the Java host works unchanged. Firefox launches `fetchgate_tcp_host.py` as the NM host; it binds `localhost:9919` and proxies between TCP clients and the browser tab. Use this when Java is not available.
 
 ## IPC
 
@@ -92,9 +109,11 @@ Strings pass through as-is; all other values are JSON.stringify'd. Errors in bot
 - `Dockerfile` — multi-stage build for Java host; no JDK needed on the host machine
 - `host_py/fetchgate.py` — Python NM client library; import and call `FetchGate().fetch()`
 - `host_py/example.py` — template Python script to copy and customise
+- `host_py/fetchgate_tcp_host.py` — Python TCP host; drop-in replacement for the Java host
 - `fetchgate.json` — NM manifest template for Java host
-- `fetchgate_py.json` — NM manifest template for Python host
-- Both NM manifests install to `~/.mozilla/native-messaging-hosts/fetchgate.json` (mutually exclusive)
+- `fetchgate_py.json` — NM manifest template for embedded Python host
+- `fetchgate_tcp_py.json` — NM manifest template for Python TCP host
+- All three NM manifests install to `~/.mozilla/native-messaging-hosts/fetchgate.json` (mutually exclusive)
 
 ## Key Behaviours
 
@@ -116,8 +135,9 @@ docker build -t fetchgate .
 javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 
-# Python: run tests (26 tests, no external dependencies)
-python3 host_py/test_fetchgate.py
+# Python: run tests (no external dependencies)
+python3 host_py/test_fetchgate.py          # 26 tests — NM library
+python3 host_py/test_fetchgate_tcp_host.py # 14 tests — Python TCP host
 ```
 
 `out/` is gitignored. Python 3.6+, JDK 21+.
