@@ -280,11 +280,13 @@ Both hosts expose the same `localhost:9919` TCP interface. Usage is identical:
 echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919
 ```
 
-`timeout 3` is needed because the host keeps connections open for persistent
-callers — without it `nc` would hang after receiving the response.
-`/robots.txt` is a safe test endpoint — it is always small. Avoid `"url":"/"`:
-many homepages exceed the 1 MB Native Messaging size limit and will return an
-error even on a healthy setup.
+`timeout 3` is needed when testing against the **Java host** — it keeps the
+connection open for persistent callers, so without it `nc` hangs after
+receiving the response. The **Python TCP host** closes the connection after
+each response, so `nc` exits cleanly without `timeout 3` (though using it is
+harmless). `/robots.txt` is a safe test endpoint — it is always small. Avoid
+`"url":"/"`: many homepages exceed the 1 MB Native Messaging size limit and
+will return an error even on a healthy setup.
 
 ### Python embedded host
 
@@ -372,10 +374,11 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   For personal use this is fine; use short-lived connections (connect, request,
   read response, disconnect) if multiple callers need to share the service.
 
-- **Single-line JSON only. *(Java host only)*** The TCP protocol is
-  newline-delimited. Each line must be a complete, compact JSON object — it must
-  start with `{` and end with `}`. Multi-line or pretty-printed JSON will be
-  rejected with an error.
+- **Single-line JSON only.** The TCP protocol is newline-delimited: each
+  request must be compact JSON on a single line. Multi-line or pretty-printed
+  JSON is not supported by either host. The Java host additionally requires the
+  request to start with `{` and end with `}` (a JSON object, not an array or
+  scalar) and rejects non-object requests with an error response.
 
 - **30-second request timeout. *(Java host only)*** If the extension does not
   reply within 30 seconds, the host sends `{"error":"timeout: ..."}` and closes
