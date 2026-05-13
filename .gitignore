@@ -45,3 +45,5 @@ __pycache__/
 Structure.txt
 devlog.md
 fg.py
+web-ext-artifacts/
+extension/.amo-upload-uuid
