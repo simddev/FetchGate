@@ -374,6 +374,11 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   For personal use this is fine; use short-lived connections (connect, request,
   read response, disconnect) if multiple callers need to share the service.
 
+- **One request per connection. *(Python TCP host only)*** The Python TCP host
+  closes the TCP connection after sending each response. Callers must open a
+  new connection for every request. The Java host keeps connections open and
+  supports multiple sequential requests per socket.
+
 - **Single-line JSON only.** The TCP protocol is newline-delimited: each
   request must be compact JSON on a single line. Multi-line or pretty-printed
   JSON is not supported by either host. The Java host additionally requires the
