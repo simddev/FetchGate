@@ -240,9 +240,14 @@ Full step-by-step instructions for all hosts are in **[INSTALL.md](INSTALL.md)**
 
 ### Step 1 — Install the extension
 
-Download **[fetchgate-0.1.1.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then drag it into any Firefox or LibreWolf window and click **Add**. Pin the FetchGate icon to the toolbar via the extensions menu. The extension persists across browser restarts — no re-loading needed.
+Download **[fetchgate-0.1.1.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
 
-> The extension is also available on [Firefox Add-ons (AMO)](https://addons.mozilla.org) — search for **FetchGate** once the listing is approved.
+- **Drag and drop:** drag the `.xpi` file into any browser window and click **Add** when prompted.
+- **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ → **Install Add-on From File**, and select the `.xpi`.
+
+Then pin the FetchGate icon to the toolbar via the extensions (puzzle-piece) menu. The extension persists across browser restarts — no re-loading needed.
+
+> The extension is also available on [Firefox Add-ons (AMO)](https://addons.mozilla.org) — search for **FetchGate** once the listing is approved. Installing from AMO gives automatic updates.
 
 > **Developers:** you can also load the extension without installing it by going to `about:debugging → This Firefox → Load Temporary Add-on` and selecting `extension/manifest.json`. Temporary add-ons do not survive browser restarts.
 
