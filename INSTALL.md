@@ -126,7 +126,8 @@ the extension asks for.
 
 ### 4. Smoke test
 
-Load the extension first (see [Load the extension](#load-the-extension) below),
+Install the extension first (see [Install the extension](#install-the-extension)
+below),
 then:
 
 1. Open any website you are logged into
@@ -151,35 +152,60 @@ and will return an error even on a perfectly healthy setup.
 A pure-Python drop-in replacement for the Java host. Firefox launches it as
 the native host; it then opens `localhost:9919` and proxies between TCP callers
 and the browser tab. Any tool that works with the Java host works unchanged.
+Requires Python 3.6+ only — no Java needed.
 
-### 1. Register the native host
+### 1. Get the files
+
+Clone or download the FetchGate repository. You need two files from it:
+
+- `host_py/fetchgate_tcp_host.py` — the host script Firefox will launch
+- `fetchgate_tcp_py.json` — the native messaging manifest template
+
+Place `fetchgate_tcp_host.py` somewhere permanent (e.g. `~/fetchgate/fetchgate_tcp_host.py`).
+
+### 2. Register the native host
+
+Create the native messaging hosts directory if it does not exist:
 
 ```bash
 mkdir -p ~/.mozilla/native-messaging-hosts
+```
+
+Copy the manifest template and rename it to `fetchgate.json` (the browser
+only looks for this exact filename):
+
+```bash
 cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
 ```
 
-Open `~/.mozilla/native-messaging-hosts/fetchgate.json` and replace the
-placeholder `path` with the absolute path to `fetchgate_tcp_host.py`:
+Open `~/.mozilla/native-messaging-hosts/fetchgate.json` in a text editor and
+replace the placeholder `path` value with the **absolute path** to where you
+placed `fetchgate_tcp_host.py`:
 
 ```json
-"path": "/absolute/path/to/FetchGate/host_py/fetchgate_tcp_host.py"
+"path": "/home/you/fetchgate/fetchgate_tcp_host.py"
 ```
 
-The file is already executable in the repository (`chmod +x` is not needed
-after cloning, but is harmless if repeated).
+Make sure the script is executable:
 
-### 2. Smoke test
+```bash
+chmod +x /home/you/fetchgate/fetchgate_tcp_host.py
+```
 
-Load the extension first (see [Load the extension](#load-the-extension) below),
-then:
+Firefox reads this manifest when it launches the host — you do **not** need to
+start the host manually. Arming a tab is all it takes.
+
+### 3. Smoke test
+
+Install the extension first (see [Install the extension](#install-the-extension)
+below), then:
 
 1. Open any website you are logged into
 2. Click the **FetchGate** toolbar button — the badge turns green **ON**
 3. In a terminal:
 
 ```bash
-echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919
+echo '{"method":"GET","url":"/robots.txt"}' | nc localhost 9919
 ```
 
 You should get back a single JSON line with `status`, `headers`, and `body`.
@@ -266,41 +292,25 @@ Click the toolbar button again to re-arm and re-run the script.
 
 ---
 
-## Load the extension
+## Install the extension
 
-The extension setup is the same for both hosts.
+The extension is the same regardless of which host you use.
 
-### Option A — Temporary (easiest, requires re-loading after each browser restart)
+Download **[fetchgate-0.1.1.xpi](https://github.com/simddev/FetchGate/releases/latest)**
+from the Releases page, then install it using either method:
 
-1. Open Firefox or LibreWolf and navigate to `about:debugging`
-2. Click **This Firefox**
-3. Click **Load Temporary Add-on...**
-4. Select the `extension/manifest.json` file from this project
+- **Drag and drop:** drag the `.xpi` file into any Firefox or LibreWolf window
+  and click **Add** when prompted.
+- **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ →
+  **Install Add-on From File**, and select the `.xpi`.
 
-The FetchGate icon appears in the toolbar. It stays loaded until you restart
-the browser. Repeat this step after each restart.
+Pin the FetchGate icon to the toolbar via the extensions (puzzle-piece) menu.
+The extension is Mozilla-signed and persists across browser restarts — no
+`about:config` changes needed, no re-loading after restarts.
 
-### Option B — Persistent (survives restarts)
-
-Standard Firefox enforces extension signing, but you can bypass this for
-personal use with a developer-friendly Firefox variant:
-
-1. Use **Firefox Developer Edition**, **Firefox Nightly**, or **LibreWolf**
-   (these allow disabling the signature requirement)
-2. Navigate to `about:config` and set:
-   ```
-   xpinstall.signatures.required = false
-   ```
-3. Package the extension as a `.xpi` file:
-   ```bash
-   cd extension && zip -r ../fetchgate.xpi . && cd ..
-   ```
-4. Navigate to `about:addons`, click the gear icon ⚙, and choose
-   **Install Add-on From File...**
-5. Select `fetchgate.xpi`
-
-The extension now persists across browser restarts without needing
-`about:debugging`.
+> **Developers:** to load without installing, go to
+> `about:debugging → This Firefox → Load Temporary Add-on` and select
+> `extension/manifest.json`. Temporary add-ons do not survive browser restarts.
 
 ---
 
