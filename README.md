@@ -236,34 +236,47 @@ Errors are returned as `{ "error": "..." }` in both modes rather than thrown.
 
 ## Installation
 
-Full step-by-step instructions for both hosts are in **[INSTALL.md](INSTALL.md)**.
+Full step-by-step instructions for all hosts are in **[INSTALL.md](INSTALL.md)**.
+
+### Step 1 — Install the extension
+
+Download **[fetchgate-0.1.1.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
+
+- **Drag and drop:** drag the `.xpi` file into any browser window and click **Add** when prompted.
+- **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ → **Install Add-on From File**, and select the `.xpi`.
+
+Then pin the FetchGate icon to the toolbar via the extensions (puzzle-piece) menu. The extension persists across browser restarts — no re-loading needed.
+
+> The extension is also available on [Firefox Add-ons (AMO)](https://addons.mozilla.org) — search for **FetchGate** once the listing is approved. Installing from AMO gives automatic updates.
+
+> **Developers:** you can also load the extension without installing it by going to `about:debugging → This Firefox → Load Temporary Add-on` and selecting `extension/manifest.json`. Temporary add-ons do not survive browser restarts.
+
+### Step 2 — Install a host
+
+Choose one host and follow its quick summary below. Full instructions are in [INSTALL.md](INSTALL.md).
 
 **Java host — quick summary (JDK):**
 1. `javac -d out src/*.java`
 2. Create `~/bin/fetchgate.sh` pointing at the compiled classes; `chmod +x` it
 3. Copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
    and set `"path"` to your launcher script
-4. Load the extension via `about:debugging → Load Temporary Add-on`
 
 **Java host — quick summary (Docker, no JDK required):**
 1. `docker build -t fetchgate .`
 2. Create `~/bin/fetchgate.sh` containing `exec docker run --rm -i --network=host fetchgate`; `chmod +x` it
 3. Copy `fetchgate.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
    and set `"path"` to your launcher script
-4. Load the extension via `about:debugging → Load Temporary Add-on`
 
 **Python TCP host — quick summary (Java-free, same TCP interface):**
 1. Copy `fetchgate_tcp_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
    and set `"path"` to the absolute path of `host_py/fetchgate_tcp_host.py`
-2. Load the extension via `about:debugging → Load Temporary Add-on`
-3. Arm a tab — Firefox launches the host automatically
+2. Arm a tab — Firefox launches the host automatically
 
 **Python embedded host — quick summary:**
 1. Copy `host_py/example.py` to a permanent location; `chmod +x` it
 2. Edit it with your fetch calls (keep the `from fetchgate import FetchGate` line)
 3. Copy `fetchgate_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
    and set `"path"` to your script
-4. Load the extension via `about:debugging → Load Temporary Add-on`
 
 ## Usage
 
@@ -401,10 +414,12 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   one toolbar click re-arms the tab and reconnects the host — no double-click
   needed.
 
-- **Extension reloads on browser restart.** Temporary add-ons (loaded via
-  `about:debugging`) do not survive browser restarts. See INSTALL.md for the
-  persistent `.xpi` install option, which requires a Firefox variant that
-  allows unsigned extensions.
+- **Extension reloads on browser restart — if loaded as a temporary add-on.**
+  Temporary add-ons (loaded via `about:debugging`) do not survive browser
+  restarts. Install the signed `.xpi` from the
+  [Releases page](https://github.com/simddev/FetchGate/releases/latest) instead
+  — it persists across restarts and works in Firefox and LibreWolf without any
+  configuration changes.
 
 - **Response capped at ~1 MB serialized.** Firefox's Native Messaging protocol
   limits individual messages to 1 MB. The content script measures the full
@@ -475,6 +490,7 @@ Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python embedded host
 fetchgate_tcp_py.json   Native Messaging manifest template — Python TCP host
+fetchgate-0.1.1.xpi     Signed extension — install directly in Firefox or LibreWolf
 INSTALL.md              Step-by-step installation guide
 ```
 
