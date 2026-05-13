@@ -158,42 +158,55 @@ Requires Python 3.6+ only — no Java needed.
 
 Clone or download the FetchGate repository. You need two files from it:
 
-- `host_py/fetchgate_tcp_host.py` — the host script Firefox will launch
-- `fetchgate_tcp_py.json` — the native messaging manifest template
+- `host_py/fetchgate_tcp_host.py` — the Python script Firefox will launch as the host
+- `fetchgate_tcp_py.json` — a manifest template that tells Firefox where to find it
 
-Place `fetchgate_tcp_host.py` somewhere permanent (e.g. `~/fetchgate/fetchgate_tcp_host.py`).
+Place `fetchgate_tcp_host.py` somewhere permanent on your machine, for example:
 
-### 2. Register the native host
-
-Create the native messaging hosts directory if it does not exist:
-
-```bash
-mkdir -p ~/.mozilla/native-messaging-hosts
+```
+/home/you/fetchgate/fetchgate_tcp_host.py
 ```
 
-Copy the manifest template and rename it to `fetchgate.json` (the browser
-only looks for this exact filename):
-
-```bash
-cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
-```
-
-Open `~/.mozilla/native-messaging-hosts/fetchgate.json` in a text editor and
-replace the placeholder `path` value with the **absolute path** to where you
-placed `fetchgate_tcp_host.py`:
-
-```json
-"path": "/home/you/fetchgate/fetchgate_tcp_host.py"
-```
-
-Make sure the script is executable:
+Make sure it is executable:
 
 ```bash
 chmod +x /home/you/fetchgate/fetchgate_tcp_host.py
 ```
 
-Firefox reads this manifest when it launches the host — you do **not** need to
-start the host manually. Arming a tab is all it takes.
+### 2. Register the native host
+
+Firefox needs a manifest file that tells it where `fetchgate_tcp_host.py` lives.
+Create the directory if it does not exist:
+
+```bash
+mkdir -p ~/.mozilla/native-messaging-hosts
+```
+
+Copy the template and rename it — the browser only looks for the exact filename `fetchgate.json`:
+
+```bash
+cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
+```
+
+Open `~/.mozilla/native-messaging-hosts/fetchgate.json` in a text editor.
+You will see a line like:
+
+```json
+"path": "/REPLACE/WITH/ABSOLUTE/PATH/TO/host_py/fetchgate_tcp_host.py"
+```
+
+Replace that placeholder with the full path to `fetchgate_tcp_host.py` — the
+file you placed in step 1. For example:
+
+```json
+"path": "/home/you/fetchgate/fetchgate_tcp_host.py"
+```
+
+This is the only line you need to change. Do not rename or move `fetchgate.json`
+itself — it must stay at `~/.mozilla/native-messaging-hosts/fetchgate.json`.
+
+Firefox reads this manifest when you arm a tab and launches the script
+automatically — you never need to start it manually.
 
 ### 3. Smoke test
 
