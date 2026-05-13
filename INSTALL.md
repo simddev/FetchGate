@@ -5,14 +5,14 @@
 FetchGate has two native host implementations. Both work with the same
 Firefox extension; you pick one based on how you want to call it.
 
-| | Java host | Python host |
-|---|---|---|
-| Requires | JDK 21+, **or Docker** | Python 3.6+ |
-| How your code calls it | Connect to `localhost:9919` from any language | Your Python script IS the host; Firefox launches it |
-| Persistent server | Yes — stays running until Firefox exits | No — script runs once and exits |
-| Good for | Multi-script workflows, any language, interactive use | A single Python script with a specific job |
+| | Java host | Python TCP host | Python embedded host |
+|---|---|---|---|
+| Requires | JDK 21+, **or Docker** | Python 3.6+ | Python 3.6+ |
+| How your code calls it | Connect to `localhost:9919` from any language | Connect to `localhost:9919` from any language | Your Python script IS the host; Firefox launches it |
+| Persistent server | Yes — stays running until Firefox exits | Yes — stays running until Firefox exits | No — script runs once and exits |
+| Good for | Multi-script workflows, any language, interactive use | Same as Java host, when Java is not available | A single Python script with a specific job |
 
-**Only one host can be active at a time.** Both install their configuration
+**Only one host can be active at a time.** All three install their configuration
 to the same file: `~/.mozilla/native-messaging-hosts/fetchgate.json`. To
 switch hosts, overwrite that file with the other template and reload the
 extension.
@@ -146,7 +146,47 @@ and will return an error even on a perfectly healthy setup.
 
 ---
 
-## Python host
+## Python TCP host
+
+A pure-Python drop-in replacement for the Java host. Firefox launches it as
+the native host; it then opens `localhost:9919` and proxies between TCP callers
+and the browser tab. Any tool that works with the Java host works unchanged.
+
+### 1. Register the native host
+
+```bash
+mkdir -p ~/.mozilla/native-messaging-hosts
+cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
+```
+
+Open `~/.mozilla/native-messaging-hosts/fetchgate.json` and replace the
+placeholder `path` with the absolute path to `fetchgate_tcp_host.py`:
+
+```json
+"path": "/absolute/path/to/FetchGate/host_py/fetchgate_tcp_host.py"
+```
+
+The file is already executable in the repository (`chmod +x` is not needed
+after cloning, but is harmless if repeated).
+
+### 2. Smoke test
+
+Load the extension first (see [Load the extension](#load-the-extension) below),
+then:
+
+1. Open any website you are logged into
+2. Click the **FetchGate** toolbar button — the badge turns green **ON**
+3. In a terminal:
+
+```bash
+echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919
+```
+
+You should get back a single JSON line with `status`, `headers`, and `body`.
+
+---
+
+## Python embedded host
 
 ### 1. Write your script
 
@@ -310,9 +350,9 @@ The extension thinks no tab is armed (background script state was lost, e.g.
 after an extension reload). Disarm and re-arm the tab by clicking the toolbar
 button twice.
 
-**Switching between Java and Python host:**
+**Switching between hosts:**
 
-Only one host can be active at a time — both use the filename
+Only one host can be active at a time — all three use the filename
 `~/.mozilla/native-messaging-hosts/fetchgate.json`. To switch:
 
 ```bash
@@ -320,7 +360,11 @@ Only one host can be active at a time — both use the filename
 cp fetchgate.json ~/.mozilla/native-messaging-hosts/fetchgate.json
 # (edit "path" to point to fetchgate.sh)
 
-# Switch to Python host
+# Switch to Python TCP host
+cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
+# (edit "path" to point to fetchgate_tcp_host.py)
+
+# Switch to Python embedded host
 cp fetchgate_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
 # (edit "path" to point to your script)
 ```

@@ -33,15 +33,15 @@ but no public API, or that actively block third-party HTTP clients.
 ## Choosing a host
 
 FetchGate requires a *native host* — a process that Firefox launches to bridge
-the extension and your code. Two implementations are provided:
+the extension and your code. Three implementations are provided:
 
-| | Java host | Python host |  
-|---|---|---|  
-| Location | `src/` | `host_py/` |
-| Requires | JDK 21+, **or Docker** | Python 3.6+ |
-| How it works | Persistent TCP server on `localhost:9919`; any caller connects to it | Firefox launches your Python script directly; the script IS the host |
-| Good for | Callers in any language, interactive use, multiple scripts | A single Python script that does a specific job |
-| Start it | Firefox starts it automatically on first arm | Firefox starts it automatically when you arm a tab |
+| | Java host | Python TCP host | Python embedded host |
+|---|---|---|---|
+| Location | `src/` | `host_py/fetchgate_tcp_host.py` | `host_py/example.py` |
+| Requires | JDK 21+, **or Docker** | Python 3.6+ | Python 3.6+ |
+| How it works | Persistent TCP server on `localhost:9919`; any caller connects over TCP | Same TCP interface as the Java host; Firefox launches it directly — no JDK or Docker needed | Firefox launches your script directly; the script IS the host |
+| Good for | Callers in any language, interactive use, multiple scripts | Callers in any language when Java is not available | A single Python script with a specific job |
+| Start it | Firefox starts it automatically on first arm | Firefox starts it automatically on first arm | Firefox starts it automatically when you arm a tab |
 
 Both hosts speak the same protocol to the extension. The extension code is
 identical regardless of which host you use.
@@ -76,7 +76,35 @@ process exits. You connect to it from any language over plain TCP. A single
 TCP connection supports multiple sequential requests — connect, send as many
 requests as you need, then disconnect.
 
-### Python host
+### Python TCP host
+
+```
+Your code (any language)
+    │
+    │  newline-delimited JSON  ·  TCP localhost:9919
+    │
+    ▼
+fetchgate_tcp_host.py  (host_py/)  — Firefox launches this directly
+    │
+    │  Firefox Native Messaging  ·  4-byte LE length-prefixed JSON on stdin/stdout
+    │
+    ▼
+background.js
+    │
+    │  browser.tabs.sendMessage()
+    │
+    ▼
+content_script.js
+    └─ runs fetch() or arbitrary JS in the tab, returns result up the chain
+```
+
+Drop-in Python replacement for the Java host. Firefox launches
+`fetchgate_tcp_host.py` when you arm the first tab; it binds `localhost:9919`
+and proxies between TCP clients and the browser. Any caller that works with
+the Java host works unchanged. Multiple concurrent TCP connections are accepted
+and handled in threads; NM access is serialised internally.
+
+### Python embedded host
 
 ```
 Your Python script  (host_py/)
@@ -203,7 +231,8 @@ Errors are returned as `{ "error": "..." }` in both modes rather than thrown.
 - GNU/Linux
 - Firefox, Firefox Developer Edition, Firefox Nightly, or LibreWolf
 - **Java host:** JDK 21+, **or Docker** (no JDK needed — the image compiles and runs the host)
-- **Python host:** Python 3.6+
+- **Python TCP host:** Python 3.6+
+- **Python embedded host:** Python 3.6+
 
 ## Installation
 
@@ -223,7 +252,13 @@ Full step-by-step instructions for both hosts are in **[INSTALL.md](INSTALL.md)*
    and set `"path"` to your launcher script
 4. Load the extension via `about:debugging → Load Temporary Add-on`
 
-**Python host — quick summary:**
+**Python TCP host — quick summary (Java-free, same TCP interface):**
+1. Copy `fetchgate_tcp_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
+   and set `"path"` to the absolute path of `host_py/fetchgate_tcp_host.py`
+2. Load the extension via `about:debugging → Load Temporary Add-on`
+3. Arm a tab — Firefox launches the host automatically
+
+**Python embedded host — quick summary:**
 1. Copy `host_py/example.py` to a permanent location; `chmod +x` it
 2. Edit it with your fetch calls (keep the `from fetchgate import FetchGate` line)
 3. Copy `fetchgate_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
@@ -232,10 +267,12 @@ Full step-by-step instructions for both hosts are in **[INSTALL.md](INSTALL.md)*
 
 ## Usage
 
-### Java host
+### Java host / Python TCP host
+
+Both hosts expose the same `localhost:9919` TCP interface. Usage is identical:
 
 1. Navigate to the site you want to query (log in if needed)
-2. Click the **FetchGate** toolbar button — Firefox starts the Java host and
+2. Click the **FetchGate** toolbar button — Firefox starts the host and
    the badge turns green **ON**
 3. From any terminal or program, send a JSON line to `localhost:9919`:
 
@@ -249,7 +286,7 @@ callers — without it `nc` would hang after receiving the response.
 many homepages exceed the 1 MB Native Messaging size limit and will return an
 error even on a healthy setup.
 
-### Python host
+### Python embedded host
 
 1. Navigate to the target site (log in if needed)
 2. Click the **FetchGate** toolbar button — Firefox immediately launches your
@@ -294,32 +331,35 @@ javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 ```
 
-**Python host:**
+**Python hosts:**
 
 ```bash
-# Run the test suite (26 tests, no external dependencies)
+# NM library (26 tests, no external dependencies)
 python3 host_py/test_fetchgate.py
+
+# Python TCP host (14 tests, no external dependencies)
+python3 host_py/test_fetchgate_tcp_host.py
 ```
 
-The Python host requires no compilation. Python 3.6+ is the only requirement.
+The Python hosts require no compilation. Python 3.6+ is the only requirement.
 
 ## Security model
 
-**Java host:** the TCP server binds exclusively to `localhost` and is not
-reachable from other machines. However, **any local process that can reach
-`localhost:9919`** — including other applications, scripts, and on a multi-user
-system, other users — can send requests to the armed tab. There is no
-authentication.
+**Java host / Python TCP host:** the TCP server binds exclusively to `localhost`
+and is not reachable from other machines. However, **any local process that can
+reach `localhost:9919`** — including other applications, scripts, and on a
+multi-user system, other users — can send requests to the armed tab. There is
+no authentication.
 
 Important: the TCP server starts when the first tab is armed and **stays open
-until Firefox or the Java process exits**. Disarming a tab does not close the
+until Firefox or the host process exits**. Disarming a tab does not close the
 port. If you arm a tab to run a single request and then disarm it, the port
 remains accessible until you close Firefox.
 
-**Python host:** there is no TCP port. Only the Python script registered in the
-native messaging manifest can interact with the extension, and only while
-Firefox has it running (i.e. while a tab is armed). This makes the Python host
-inherently more contained.
+**Python embedded host:** there is no TCP port. Only the Python script
+registered in the native messaging manifest can interact with the extension,
+and only while Firefox has it running (i.e. while a tab is armed). This makes
+the embedded Python host inherently more contained.
 
 Both models are acceptable trade-offs for a personal tool on a single-user
 machine. Do not run the Java host on shared or multi-user infrastructure.
@@ -342,9 +382,11 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   the connection. The in-tab `fetch()` continues running in the browser; the
   eventual late reply is discarded by ID matching.
 
-- **No request timeout. *(Python host only)*** `fetch()` blocks until the
+- **No request timeout. *(Python hosts only)*** `fetch()` blocks until the
   extension replies or the Native Messaging connection closes. If the server
-  being queried is slow or unresponsive, the script will block indefinitely.
+  being queried is slow or unresponsive, the host will block indefinitely.
+  TCP callers (e.g. hunter.py) can impose their own socket timeout on the
+  client side independently of this.
 
 - **One armed tab at a time.** The extension tracks a single armed tab. Arming
   a second tab automatically disarms the first. After a disconnect (ERR badge),
@@ -392,7 +434,8 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   every request and response to stderr, truncated at 120 characters. On a
   multi-user system this output may be visible in terminal history or system
   journals. Run the host in a dedicated terminal; do not pipe stderr to
-  persistent storage. The Python host performs no logging of its own.
+  persistent storage. The Python hosts perform no logging of request or
+  response content.
 
 ## Project structure
 
@@ -402,10 +445,12 @@ src/                    Java native host (TCP bridge)
   NativeMessaging.java  Firefox Native Messaging framing (length-prefixed JSON)
   NativeHost.java       TCP server, stdin-reader thread, full request lifecycle
 
-host_py/                Python native host (direct — no TCP)
+host_py/                Python native hosts
   fetchgate.py          Native Messaging library; import this in your script
-  example.py            Working example script to copy and customise
-  test_fetchgate.py     Python test suite (26 tests, no external framework)
+  example.py            Working example script to copy and customise (embedded host)
+  fetchgate_tcp_host.py Python TCP host — drop-in replacement for the Java host
+  test_fetchgate.py     Python test suite — NM library (26 tests, no external framework)
+  test_fetchgate_tcp_host.py  Python test suite — TCP host (14 tests, no external framework)
 
 extension/              WebExtension — shared by both hosts, never changes
   manifest.json         MV2 manifest; extension ID: fetchgate@localhost
@@ -420,7 +465,8 @@ tests/                  Java test suite (no external framework)
 
 Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
-fetchgate_py.json       Native Messaging manifest template — Python host
+fetchgate_py.json       Native Messaging manifest template — Python embedded host
+fetchgate_tcp_py.json   Native Messaging manifest template — Python TCP host
 INSTALL.md              Step-by-step installation guide
 ```
 
