@@ -1,9 +1,31 @@
 # FetchGate — Installation
 
+## Install the extension
+
+The extension is the same regardless of which host you use. Install it first.
+
+Download **[fetchgate-0.1.1.xpi](https://github.com/simddev/FetchGate/releases/latest)**
+from the Releases page, then install it using either method:
+
+- **Drag and drop:** drag the `.xpi` file into any Firefox or LibreWolf window
+  and click **Add** when prompted.
+- **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ →
+  **Install Add-on From File**, and select the `.xpi`.
+
+Pin the FetchGate icon to the toolbar via the extensions (puzzle-piece) menu.
+The extension is Mozilla-signed and persists across browser restarts — no
+`about:config` changes needed, no re-loading after restarts.
+
+> **Developers:** to load without installing, go to
+> `about:debugging → This Firefox → Load Temporary Add-on` and select
+> `extension/manifest.json`. Temporary add-ons do not survive browser restarts.
+
+---
+
 ## Choose your host
 
-FetchGate has two native host implementations. Both work with the same
-Firefox extension; you pick one based on how you want to call it.
+FetchGate also requires a *native host* — a process that Firefox launches to
+bridge the extension and your code. Pick one based on how you want to call it:
 
 | | Java host | Python TCP host | Python embedded host |
 |---|---|---|---|
@@ -127,7 +149,7 @@ the extension asks for.
 ### 4. Smoke test
 
 Install the extension first (see [Install the extension](#install-the-extension)
-below),
+above),
 then:
 
 1. Open any website you are logged into
@@ -210,8 +232,8 @@ automatically — you never need to start it manually.
 
 ### 3. Smoke test
 
-Install the extension first (see [Install the extension](#install-the-extension)
-below), then:
+Ensure the extension is installed (see [Install the extension](#install-the-extension)
+above), then:
 
 1. Open any website you are logged into
 2. Click the **FetchGate** toolbar button — the badge turns green **ON**
@@ -302,28 +324,6 @@ Click the toolbar button again to re-arm and re-run the script.
 
 > **Firefox starts the script, not you.** There is no process to launch
 > manually. Just arm the tab.
-
----
-
-## Install the extension
-
-The extension is the same regardless of which host you use.
-
-Download **[fetchgate-0.1.1.xpi](https://github.com/simddev/FetchGate/releases/latest)**
-from the Releases page, then install it using either method:
-
-- **Drag and drop:** drag the `.xpi` file into any Firefox or LibreWolf window
-  and click **Add** when prompted.
-- **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ →
-  **Install Add-on From File**, and select the `.xpi`.
-
-Pin the FetchGate icon to the toolbar via the extensions (puzzle-piece) menu.
-The extension is Mozilla-signed and persists across browser restarts — no
-`about:config` changes needed, no re-loading after restarts.
-
-> **Developers:** to load without installing, go to
-> `about:debugging → This Firefox → Load Temporary Add-on` and select
-> `extension/manifest.json`. Temporary add-ons do not survive browser restarts.
 
 ---
 
