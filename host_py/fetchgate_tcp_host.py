@@ -41,8 +41,8 @@ Notes
 - Do not write to sys.stdout after constructing FetchGate() — it is redirected
   to sys.stderr to protect the NM binary stream. All print() calls here go to
   stderr, which is what the Firefox Browser Console shows.
-- No request timeout. If a rohlik.cz request hangs, the TCP client (e.g.
-  hunter.py) will time out on its own socket and move on.
+- No request timeout. If a request hangs, the TCP client can impose its own
+  socket timeout on the client side.
 """
 
 import json
