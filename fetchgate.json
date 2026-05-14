@@ -1,6 +1,6 @@
 {
   "name": "fetchgate",
-  "description": "FetchGate native host — proxies fetch() calls from a browser tab to an external process.",
+  "description": "FetchGate Java native host — bridges TCP clients to the browser tab via Native Messaging.",
   "path": "/REPLACE/WITH/ABSOLUTE/PATH/TO/fetchgate.sh",
   "type": "stdio",
   "allowed_extensions": ["fetchgate@localhost"]

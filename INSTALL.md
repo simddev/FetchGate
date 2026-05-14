@@ -355,7 +355,7 @@ The Java host failed to start. Check:
 - The path in `fetchgate.sh` is correct
 - `fetchgate.sh` is executable
 
-**The badge shows ERR immediately after arming (Python host):**
+**The badge shows ERR immediately after arming (Python embedded host):**
 
 Your script exited with an error. Run it directly in a terminal to see the
 output:
