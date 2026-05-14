@@ -268,9 +268,10 @@ Choose one host and follow its quick summary below. Full instructions are in [IN
    and set `"path"` to your launcher script
 
 **Python TCP host — quick summary (Java-free, same TCP interface):**
-1. Copy `fetchgate_tcp_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
+1. `chmod +x host_py/fetchgate_tcp_host.py`
+2. Copy `fetchgate_tcp_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
    and set `"path"` to the absolute path of `host_py/fetchgate_tcp_host.py`
-2. Arm a tab — Firefox launches the host automatically
+3. Arm a tab — Firefox launches the host automatically
 
 **Python embedded host — quick summary:**
 1. Copy `host_py/example.py` to a permanent location; `chmod +x` it
