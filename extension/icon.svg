@@ -1,20 +1,32 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
-  <title>FetchGate</title>
+  <defs>
+    <filter id="glow" x="-25%" y="-25%" width="150%" height="150%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
 
-  <!-- Orange arrow shaft — drawn first so the left gate post overlays it,
-       giving the impression the arrow is entering from the left. -->
-  <rect x="0" y="20" width="38" height="8" rx="1" fill="#EA580C"/>
+  <!-- Dark background -->
+  <rect width="48" height="48" rx="9" fill="#0F172A"/>
 
-  <!-- Blue gate: posts 11px wide, crossbeam 11px tall, gap 9px.
-       Left post x=5–16, right post x=25–36, gap x=16–25. -->
-  <rect x="5"  y="5" width="11" height="38" rx="2" fill="#2563EB"/>
-  <rect x="25" y="5" width="11" height="38" rx="2" fill="#2563EB"/>
-  <rect x="5"  y="5" width="31" height="11" rx="2" fill="#2563EB"/>
+  <!-- Portal fill inside gate -->
+  <path d="M12.75,46 L12.75,23 A11.25,11.25 0 0 0 35.25,23 L35.25,46 Z"
+        fill="#1D4ED8" opacity="0.3"/>
 
-  <!-- Right portion of shaft — drawn after the gate so it overlaps the right
-       post. Starts 2px before the right post (x=25) to cover anti-aliasing. -->
-  <rect x="23" y="20" width="15" height="8" fill="#EA580C"/>
+  <!-- Arrow shaft (behind gate) -->
+  <rect x="1" y="30" width="40" height="6" rx="1" fill="#EA580C"/>
 
-  <!-- Arrowhead — base aligned to right post's right edge (x=36). -->
-  <polygon points="36,13 48,24 36,35" fill="#EA580C"/>
+  <!-- Gate halo -->
+  <path d="M11,46 L11,23 A13,13 0 0 0 37,23 L37,46"
+        stroke="#93C5FD" stroke-width="8" fill="none" opacity="0.15"/>
+
+  <!-- Gate main stroke -->
+  <path d="M11,46 L11,23 A13,13 0 0 0 37,23 L37,46"
+        stroke="#3B82F6" stroke-width="3.5" fill="none" filter="url(#glow)"/>
+
+  <!-- Arrowhead (front, right of gate) -->
+  <polygon points="39,27 47,33 39,39" fill="#EA580C" filter="url(#glow)"/>
 </svg>
