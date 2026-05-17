@@ -46,7 +46,6 @@ Notes
 """
 
 import json
-import os
 import socket
 import sys
 import threading
@@ -88,17 +87,22 @@ def handle_client(
     """
     try:
         # Read bytes until a newline arrives — same framing the Java host uses.
-        buf = b""
+        # bytearray.extend() is O(chunk) rather than O(total), and find() stops
+        # at the first newline so a pipelined second request is not consumed.
+        buf = bytearray()
+        line = None
         while True:
             chunk = conn.recv(RECV_SIZE)
             if not chunk:
                 return  # client disconnected before sending a complete request
-            buf += chunk
-            if buf.endswith(b"\n"):
+            buf.extend(chunk)
+            nl = buf.find(b"\n")
+            if nl >= 0:
+                line = bytes(buf[:nl])
                 break
 
         try:
-            req = json.loads(buf.decode())
+            req = json.loads(line.decode())
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             _send(conn, {"error": f"Malformed request: {exc}"})
             return
