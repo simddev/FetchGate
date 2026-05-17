@@ -240,7 +240,7 @@ Full step-by-step instructions for all hosts are in **[INSTALL.md](INSTALL.md)**
 
 ### Step 1 — Install the extension
 
-Download **[fetchgate-0.1.2.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
+Download **[fetchgate-0.1.4.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
 
 - **Drag and drop:** drag the `.xpi` file into any browser window and click **Add** when prompted.
 - **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ → **Install Add-on From File**, and select the `.xpi`.
@@ -313,7 +313,7 @@ will return an error even on a healthy setup.
 ```python
 #!/usr/bin/env python3
 import sys
-sys.path.insert(0, "/path/to/FetchGate/host_py")
+sys.path.insert(0, "/absolute/path/to/FetchGate/host_py")  # replace with real path
 from fetchgate import FetchGate
 
 fg = FetchGate()
@@ -452,7 +452,7 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
   even if `Content-Type` correctly declares the encoding. The practical impact
   is low: the overwhelming majority of modern sites serve UTF-8.
 
-- **Infinite loops in JS mode hang the tab.** JavaScript executed via JS mode runs on the browser's main thread inside the tab. If the code contains an infinite loop, the tab becomes unresponsive and cannot serve further requests. The Java host will return a timeout error after 30 seconds, but the loop keeps running until the user navigates away from or closes the tab. The Python host will block indefinitely. There is no way for the extension to interrupt running JavaScript.
+- **Infinite loops in JS mode block the tab entirely.** JavaScript executed via JS mode runs on the browser's main thread inside the tab. If the code contains an infinite loop, the tab's main thread is blocked — subsequent requests to that tab, including fetch-mode requests, also hang until the user navigates away or closes the tab. The Java host returns a timeout error after 30 seconds, but the loop keeps running; the Python host blocks indefinitely. There is no way for the extension to interrupt running JavaScript.
 
 - **Logs may contain sensitive data. *(Java host only)*** The Java host logs
   every request and response to stderr, truncated at 120 characters. On a
@@ -491,7 +491,7 @@ Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python embedded host
 fetchgate_tcp_py.json   Native Messaging manifest template — Python TCP host
-fetchgate-0.1.2.xpi     Signed extension — install directly in Firefox or LibreWolf
+fetchgate-0.1.4.xpi     Signed extension — install directly in Firefox or LibreWolf
 INSTALL.md              Step-by-step installation guide
 ```
 

@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Pattern;
 
 /**
  * Core of the FetchGate native host.
@@ -185,19 +186,6 @@ public class NativeHost {
                     break;
                 }
 
-                // Discard any stale response left in the queue from a previous
-                // timed-out request that arrived late.
-                responseQueue.clear();
-
-                // Re-check after the clear: if Firefox died in the tiny window between the
-                // first check above and clear(), the sentinel would have been consumed.
-                // This second check narrows the race to near zero without heavy locking.
-                if (!firefoxAlive) {
-                    log("Firefox already disconnected — returning error to caller");
-                    out.println("{\"error\":\"connection to Firefox was closed\"}");
-                    break;
-                }
-
                 // Assign a unique ID and inject it into the JSON. background.js echoes the
                 // ID back in the response, so the host can verify each reply belongs to the
                 // current request and discard any stale replies from prior timed-out requests.
@@ -314,8 +302,10 @@ public class NativeHost {
      *   {"__fg_id":1,"status":200}  →  {"status":200}
      *   {"__fg_id":1}               →  {}
      */
+    private static final Pattern FG_ID_PATTERN = Pattern.compile("\"__fg_id\":\\d+,?");
+
     private static String stripFgId(String json) {
-        return json.replaceFirst("\"__fg_id\":\\d+,?", "");
+        return FG_ID_PATTERN.matcher(json).replaceFirst("");
     }
 
     // -------------------------------------------------------------------------
