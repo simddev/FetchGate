@@ -247,7 +247,7 @@ Download **[fetchgate-0.1.6.xpi](https://github.com/simddev/FetchGate/releases/l
 
 Then pin the FetchGate icon to the toolbar via the extensions (puzzle-piece) menu. The extension persists across browser restarts — no re-loading needed.
 
-> The extension is also available on [Firefox Add-ons (AMO)](https://addons.mozilla.org) — search for **FetchGate** once the listing is approved. Installing from AMO gives automatic updates.
+> The extension is also available on [Firefox Add-ons (AMO)](https://addons.mozilla.org/en-US/firefox/addon/fetchgate/) — search for **FetchGate** or install directly from the listing. Installing from AMO gives automatic updates.
 
 > **Developers:** you can also load the extension without installing it by going to `about:debugging → This Firefox → Load Temporary Add-on` and selecting `extension/manifest.json`. Temporary add-ons do not survive browser restarts.
 

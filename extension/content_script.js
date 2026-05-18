@@ -1,5 +1,7 @@
 'use strict';
 
+const NM_LIMIT_BYTES = 1_000_000;
+
 // Guard against double-injection (can happen if the background script
 // re-injects after navigation while the previous instance is still alive).
 if (!window.__fetchGateInstalled) {
@@ -53,7 +55,6 @@ async function executeJs(spec) {
 
         const reply = { result: serialized };
 
-        const NM_LIMIT_BYTES = 1_000_000;
         const replyBytes = new TextEncoder().encode(JSON.stringify(reply)).byteLength;
         if (replyBytes > NM_LIMIT_BYTES) {
             return { error: `result too large (${replyBytes} bytes serialized; Native Messaging limit is 1 MB)` };
@@ -102,7 +103,6 @@ async function executeFetch(spec) {
         // multi-byte characters (e.g. one CJK char = 3 UTF-8 bytes).
         // background.js adds ~20 bytes of __fg_id envelope on top, so
         // 1 000 000 bytes is a safe ceiling with ample headroom.
-        const NM_LIMIT_BYTES = 1_000_000;
         const replyBytes = new TextEncoder().encode(JSON.stringify(reply)).byteLength;
         if (replyBytes > NM_LIMIT_BYTES) {
             return { error: `response too large (${replyBytes} bytes serialized; Native Messaging limit is 1 MB)` };

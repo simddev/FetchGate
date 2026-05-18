@@ -36,8 +36,10 @@ Notes
 - Only one NM request is in flight at a time — NM is serial by design.
   Concurrent TCP clients are accepted and handled in threads; each waits for
   the lock before forwarding to the browser.
-- The script exits when Firefox closes the NM connection (tab closed or
-  extension disabled). In-flight TCP requests receive an error response.
+- When Firefox closes the NM connection, the next fg.fetch() call raises
+  FetchGateError and nm_dead is set — subsequent TCP clients receive an error.
+  If no client is connected at that moment, the process continues running
+  until killed (e.g. when Firefox itself exits and the OS reclaims the process).
 - Do not write to sys.stdout after constructing FetchGate() — it is redirected
   to sys.stderr to protect the NM binary stream. All print() calls here go to
   stderr, which is what the Firefox Browser Console shows.

@@ -101,6 +101,21 @@ class TestWrite(unittest.TestCase):
         self.assertEqual(len(data), target)
         fg._write(obj)  # must not raise
 
+    def test_raises_fetchgate_error_on_broken_output_stream(self):
+        # OSError from the underlying stream (e.g. BrokenPipeError when Firefox
+        # has exited) must surface as FetchGateError so handle_client can set
+        # nm_dead and return a proper error to the TCP client, not silently close.
+        class BrokenStream:
+            def write(self, _): raise BrokenPipeError("NM pipe broken")
+            def flush(self): pass
+
+        fg = FetchGate.__new__(FetchGate)
+        fg._out = BrokenStream()
+        fg._in  = io.BytesIO()
+        fg._seq = 0
+        with self.assertRaises(FetchGateError):
+            fg._write({"url": "/"})
+
 
 # ── NM framing: _read ─────────────────────────────────────────────────────────
 
@@ -139,6 +154,12 @@ class TestRead(unittest.TestCase):
 
     def test_returns_none_on_malformed_json(self):
         bad = b"this is not json"
+        fg = self._fg_with_raw_input(struct.pack("<I", len(bad)) + bad)
+        self.assertIsNone(fg._read())
+
+    def test_returns_none_on_invalid_utf8_payload(self):
+        # Invalid UTF-8 bytes must not crash _read() with UnicodeDecodeError.
+        bad = b"\xff\xfe"
         fg = self._fg_with_raw_input(struct.pack("<I", len(bad)) + bad)
         self.assertIsNone(fg._read())
 
