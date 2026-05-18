@@ -120,9 +120,12 @@ class FetchGate:
         data = json.dumps(obj).encode("utf-8")
         if len(data) > self._MAX_BYTES:
             raise FetchGateError(f"Outgoing message too large: {len(data)} bytes")
-        self._out.write(struct.pack("<I", len(data)))
-        self._out.write(data)
-        self._out.flush()
+        try:
+            self._out.write(struct.pack("<I", len(data)))
+            self._out.write(data)
+            self._out.flush()
+        except OSError as e:
+            raise FetchGateError(f"NM write failed: {e}") from e
 
     def _read(self) -> Optional[dict]:
         # sys.stdin.buffer is a BufferedReader; BufferedReader.read(n) blocks
@@ -139,5 +142,5 @@ class FetchGate:
             return None  # truncated frame
         try:
             return json.loads(payload.decode("utf-8"))
-        except json.JSONDecodeError:
-            return None  # malformed JSON frame — treat as lost connection
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return None  # malformed frame — treat as lost connection
