@@ -165,6 +165,51 @@ class TestHandleClientBadRequests(unittest.TestCase):
         self.assertIn("error", resp)
         self.assertEqual(fg.calls, [])
 
+    def test_oversized_request_returns_error_without_setting_nm_dead(self):
+        # A request that exceeds the 1 MB limit must be rejected before fg.fetch()
+        # is called. If it reached fg.fetch(), _write() would raise FetchGateError
+        # and handle_client would set nm_dead, killing the host for all future clients
+        # even though the NM connection to Firefox is perfectly alive.
+        nm_dead = threading.Event()
+        lock = threading.Lock()
+        fg = MockFetchGate([{"status": 200, "body": "should not reach"}])
+        server_sock, client_sock = socket.socketpair()
+
+        t = threading.Thread(
+            target=handle_client,
+            args=(server_sock, fg, lock, nm_dead),
+        )
+        t.start()
+
+        # 1 MB + 1 byte of data followed by a newline.
+        try:
+            client_sock.sendall(b"x" * (1_048_576 + 1) + b"\n")
+        except OSError:
+            pass  # server may close the socket before all bytes are consumed
+
+        buf = b""
+        client_sock.settimeout(2.0)
+        try:
+            while True:
+                chunk = client_sock.recv(65536)
+                if not chunk:
+                    break
+                buf += chunk
+                if b"\n" in buf:
+                    break
+        except OSError:
+            pass
+        finally:
+            client_sock.close()
+
+        t.join(timeout=2)
+
+        self.assertTrue(buf.strip(), "server must send an error response")
+        resp = json.loads(buf.decode().strip())
+        self.assertIn("error", resp)
+        self.assertFalse(nm_dead.is_set(), "nm_dead must NOT be set for an oversized request")
+        self.assertEqual(fg.calls, [])
+
     def test_client_disconnect_before_newline_returns_nothing(self):
         """Connection closed before a complete request — no response expected."""
         fg = MockFetchGate([])

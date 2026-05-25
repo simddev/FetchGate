@@ -60,6 +60,7 @@ from fetchgate import FetchGate, FetchGateError
 TCP_HOST = "localhost"
 TCP_PORT = 9919
 RECV_SIZE = 65536
+MAX_RECV_BYTES = 1_048_576  # reject before calling fg.fetch() to avoid false nm_dead
 
 
 def _send(conn: socket.socket, obj: dict) -> None:
@@ -98,6 +99,9 @@ def handle_client(
             if not chunk:
                 return  # client disconnected before sending a complete request
             buf.extend(chunk)
+            if len(buf) > MAX_RECV_BYTES:
+                _send(conn, {"error": "Request too large (exceeds 1 MB)"})
+                return
             nl = buf.find(b"\n")
             if nl >= 0:
                 line = bytes(buf[:nl])

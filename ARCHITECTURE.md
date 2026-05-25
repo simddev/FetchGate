@@ -1,6 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+# Architecture
 
 ## Project Overview
 
@@ -136,7 +134,7 @@ javac -d out src/*.java tests/*.java
 java  -cp out TestRunner
 
 # Python: run tests (no external dependencies)
-python3 host_py/test_fetchgate.py          # 26 tests — NM library
+python3 host_py/test_fetchgate.py          # 28 tests — NM library
 python3 host_py/test_fetchgate_tcp_host.py # 14 tests — Python TCP host
 ```
 
