@@ -15,7 +15,7 @@ import threading
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fetchgate import FetchGateError
+from fetchgate import FetchGateError, FetchGateSizeError
 from fetchgate_tcp_host import _send, handle_client
 
 
@@ -235,6 +235,15 @@ class TestHandleClientBadRequests(unittest.TestCase):
 
 
 class TestHandleClientNMFailure(unittest.TestCase):
+
+    def test_fetchgate_size_error_returns_error_without_setting_nm_dead(self):
+        # FetchGateSizeError means the envelope was too large for NM — the
+        # connection to Firefox is still alive. nm_dead must NOT be set.
+        fg = MockFetchGate([FetchGateSizeError("Outgoing message too large: 1048700 bytes")])
+        nm_dead = threading.Event()
+        resp = run_handle_client(req({"url": "/"}), fg, nm_dead=nm_dead)
+        self.assertIn("error", resp)
+        self.assertFalse(nm_dead.is_set())
 
     def test_fetchgate_error_sets_nm_dead_and_returns_error(self):
         fg = MockFetchGate([FetchGateError("NM pipe closed")])

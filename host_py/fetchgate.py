@@ -46,6 +46,14 @@ class FetchGateError(Exception):
     """Raised when the Native Messaging connection to Firefox is lost."""
 
 
+class FetchGateSizeError(FetchGateError):
+    """Raised when a message exceeds the 1 MB Native Messaging limit.
+
+    A subclass of FetchGateError, but does NOT indicate a broken NM connection —
+    the connection remains alive and subsequent requests can succeed.
+    """
+
+
 class FetchGate:
     """Send fetch() requests through the armed Firefox tab.
 
@@ -97,6 +105,9 @@ class FetchGate:
 
         Raises
         ------
+        FetchGateSizeError
+            If the serialised request exceeds the 1 MB Native Messaging limit.
+            The NM connection remains alive; subsequent calls can succeed.
         FetchGateError
             If the Native Messaging connection to Firefox is lost.
         """
@@ -119,7 +130,7 @@ class FetchGate:
     def _write(self, obj: dict) -> None:
         data = json.dumps(obj).encode("utf-8")
         if len(data) > self._MAX_BYTES:
-            raise FetchGateError(f"Outgoing message too large: {len(data)} bytes")
+            raise FetchGateSizeError(f"Outgoing message too large: {len(data)} bytes")
         try:
             self._out.write(struct.pack("<I", len(data)))
             self._out.write(data)

@@ -55,7 +55,7 @@ from pathlib import Path
 
 # Allow importing fetchgate.py from the same directory, regardless of cwd.
 sys.path.insert(0, str(Path(__file__).parent))
-from fetchgate import FetchGate, FetchGateError
+from fetchgate import FetchGate, FetchGateError, FetchGateSizeError
 
 TCP_HOST = "localhost"
 TCP_PORT = 9919
@@ -119,6 +119,10 @@ def handle_client(
                 return
             try:
                 resp = fg.fetch(req)
+            except FetchGateSizeError as exc:
+                # Request too large for NM — connection is alive, do NOT set nm_dead.
+                _send(conn, {"error": str(exc)})
+                return
             except FetchGateError as exc:
                 # NM pipe is broken — mark it so future clients fail fast.
                 nm_dead.set()
