@@ -15,7 +15,7 @@ import unittest
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fetchgate import FetchGate, FetchGateError
+from fetchgate import FetchGate, FetchGateError, FetchGateSizeError
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -82,7 +82,12 @@ class TestWrite(unittest.TestCase):
         parsed = json.loads(out.read(length).decode("utf-8"))
         self.assertEqual(parsed, obj)
 
-    def test_raises_fetchgate_error_when_payload_exceeds_1mb(self):
+    def test_raises_fetchgate_size_error_when_payload_exceeds_1mb(self):
+        fg, _ = make_fg()
+        with self.assertRaises(FetchGateSizeError):
+            fg._write({"body": "x" * (1024 * 1024 + 1)})
+
+    def test_size_error_is_subclass_of_fetchgate_error(self):
         fg, _ = make_fg()
         with self.assertRaises(FetchGateError):
             fg._write({"body": "x" * (1024 * 1024 + 1)})
