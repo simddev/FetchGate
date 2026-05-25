@@ -350,10 +350,10 @@ java  -cp out TestRunner
 **Python hosts:**
 
 ```bash
-# NM library (26 tests, no external dependencies)
+# NM library (29 tests, no external dependencies)
 python3 host_py/test_fetchgate.py
 
-# Python TCP host (14 tests, no external dependencies)
+# Python TCP host (16 tests, no external dependencies)
 python3 host_py/test_fetchgate_tcp_host.py
 ```
 
@@ -473,8 +473,8 @@ host_py/                Python native hosts
   fetchgate.py          Native Messaging library; import this in your script
   example.py            Working example script to copy and customise (embedded host)
   fetchgate_tcp_host.py Python TCP host — drop-in replacement for the Java host
-  test_fetchgate.py     Python test suite — NM library (26 tests, no external framework)
-  test_fetchgate_tcp_host.py  Python test suite — TCP host (14 tests, no external framework)
+  test_fetchgate.py     Python test suite — NM library (29 tests, no external framework)
+  test_fetchgate_tcp_host.py  Python test suite — TCP host (16 tests, no external framework)
 
 extension/              WebExtension — shared by both hosts, never changes
   manifest.json         MV2 manifest; extension ID: fetchgate@localhost
@@ -487,6 +487,7 @@ tests/                  Java test suite (no external framework)
   NativeMessagingTest.java  NM framing protocol tests
   NativeHostTest.java       TCP↔NM bridge and request lifecycle tests
 
+ARCHITECTURE.md         Project architecture, IPC protocol, build commands, design constraints
 Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python embedded host
