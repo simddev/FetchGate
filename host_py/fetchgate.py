@@ -30,7 +30,9 @@ Notes
 - Firefox launches (and owns) the process lifetime. The script runs once
   and exits; to re-run it, click the toolbar button again to re-arm.
 - Responses with {"error": "..."} are returned normally, not raised.
-  Only a lost NM connection raises FetchGateError.
+  FetchGateError is raised if the NM connection is lost. FetchGateSizeError
+  (a subclass) is raised if a request exceeds the 1 MB NM limit — the
+  connection remains alive in that case.
 - There is no request timeout. fetch() blocks until the extension replies
   or the NM connection is closed. If the browser network request hangs
   (e.g. a slow or unresponsive server), the script will block indefinitely.
