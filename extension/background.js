@@ -7,6 +7,17 @@ let armedTabId = null;
 // The Native Messaging port to the native host (null = not connected).
 let port = null;
 
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+function notify(title, message) {
+    browser.notifications.create({
+        type: 'basic',
+        iconUrl: browser.runtime.getURL('icon.svg'),
+        title,
+        message,
+    });
+}
+
 // ─── Native Messaging ────────────────────────────────────────────────────────
 
 function connect() {
@@ -24,6 +35,8 @@ function connect() {
         if (armedTabId !== null) {
             browser.browserAction.setBadgeText({ text: 'ERR', tabId: armedTabId });
             browser.browserAction.setBadgeBackgroundColor({ color: '#cc0000', tabId: armedTabId });
+            notify('FetchGate — Native Host Disconnected',
+                   'The host process has stopped. Click the toolbar button to reconnect.');
         }
     });
 
@@ -79,7 +92,7 @@ async function onRequestFromHost(msg) {
 browser.browserAction.onClicked.addListener(async (tab) => {
     if (armedTabId === tab.id && port !== null) {
         // Tab is armed and the native host is connected — toggle off.
-        disarm(tab.id);
+        disarm(tab.id, 'Tab has been disarmed.');
     } else {
         // Arm, or re-arm after ERR: disarm whatever was armed first (if anything).
         if (armedTabId !== null) disarm(armedTabId);
@@ -101,6 +114,7 @@ async function arm(tabId) {
     armedTabId = tabId;
     browser.browserAction.setBadgeText({ text: 'ON', tabId });
     browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
+    notify('FetchGate Armed', 'Tab is ready — requests will be routed through this tab.');
 
     // Connect to the native host if not already connected (also handles re-arm after ERR).
     if (!port) connect();
@@ -108,9 +122,10 @@ async function arm(tabId) {
     console.log('[FetchGate] Tab armed:', tabId);
 }
 
-function disarm(tabId) {
+function disarm(tabId, reason) {
     armedTabId = null;
     browser.browserAction.setBadgeText({ text: '', tabId });
+    if (reason) notify('FetchGate Disarmed', reason);
     console.log('[FetchGate] Tab disarmed:', tabId);
 }
 
@@ -119,8 +134,7 @@ function disarm(tabId) {
 // If the armed tab is closed, clear state.
 browser.tabs.onRemoved.addListener((tabId) => {
     if (tabId === armedTabId) {
-        armedTabId = null;
-        console.log('[FetchGate] Armed tab closed — disarmed.');
+        disarm(tabId, 'The armed tab was closed.');
     }
 });
 
@@ -133,7 +147,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
         browser.tabs.executeScript(tabId, { file: 'content_script.js' })
                .catch(e => {
                    console.error('[FetchGate] Re-inject after navigation failed:', e.message);
-                   disarm(tabId);
+                   disarm(tabId, 'The tab navigated to a restricted page — re-arm to continue.');
                });
     }
 });
