@@ -100,7 +100,7 @@ Strings pass through as-is; all other values are JSON.stringify'd. Errors in bot
 
 ## Components / Deliverables
 
-- `extension/manifest.json` — WebExtension manifest (permissions: `nativeMessaging`, `activeTab`, `tabs`, `<all_urls>`)
+- `extension/manifest.json` — WebExtension manifest (permissions: `nativeMessaging`, `notifications`, `activeTab`, `tabs`, `<all_urls>`)
 - `extension/background.js` — manages "armed tab" state, Native Messaging connection, routes messages to content script
 - `extension/content_script.js` — executes `fetch()` or arbitrary JS in tab context, returns result
 - `src/` — Java native host: TCP server on `localhost:9919`, NM framing, request lifecycle
@@ -116,6 +116,7 @@ Strings pass through as-is; all other values are JSON.stringify'd. Errors in bot
 ## Key Behaviours
 
 - User must explicitly activate the extension per tab (toolbar button click) — badge shows ON (green) or ERR (red)
+- Desktop notifications fire on arm, disarm, and native host disconnect
 - Only one tab can be armed at a time; arming a second tab disarms the first
 - Request timeout: 30 seconds (Java host only; Python host has no timeout)
 - A tab being "armed" is the single source of truth held by the background script
