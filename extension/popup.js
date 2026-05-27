@@ -25,7 +25,7 @@ async function init() {
 }
 
 async function renderStatus() {
-    const { armedTabId, portConnected } = bg.getState();
+    const { armedTabId, portConnected, lastDisarmReason } = bg.getState();
 
     let armedTab = null;
     if (armedTabId !== null) {
@@ -39,7 +39,7 @@ async function renderStatus() {
         // ── Disarmed ─────────────────────────────────────────────
         setDot('disarmed');
         statusLabel.textContent  = 'Disarmed';
-        statusDetail.textContent = 'No tab is currently armed.';
+        statusDetail.textContent = lastDisarmReason || 'No tab is currently armed.';
         setBtn('arm', 'Arm this tab', async () => {
             if (currentTab) await bg.arm(currentTab.id);
             window.close();
@@ -72,7 +72,7 @@ async function renderStatus() {
         statusDetail.innerHTML  = domain(armedTab) +
             (portConnected ? '<br>Host: connected' : '<br>Host: disconnected');
         setBtn('switch', 'Arm this tab instead', async () => {
-            bg.disarm(armedTabId);
+            bg.disarm(armedTabId, 'Switched to a different tab.');
             if (currentTab) await bg.arm(currentTab.id);
             window.close();
         });
