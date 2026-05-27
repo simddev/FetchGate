@@ -145,6 +145,12 @@ browser.tabs.onRemoved.addListener((tabId) => {
 browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (tabId === armedTabId && changeInfo.status === 'complete') {
         browser.tabs.executeScript(tabId, { file: 'content_script.js' })
+               .then(() => {
+                   // Re-apply the badge — Firefox resets per-tab badge text on navigation.
+                   browser.browserAction.setBadgeText({ text: 'ON', tabId });
+                   browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
+                   notify('FetchGate Re-armed', 'Tab navigated — content script re-injected successfully.');
+               })
                .catch(e => {
                    console.error('[FetchGate] Re-inject after navigation failed:', e.message);
                    disarm(tabId, 'The tab navigated to a restricted page — re-arm to continue.');
