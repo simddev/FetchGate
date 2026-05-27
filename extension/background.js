@@ -7,11 +7,24 @@ let armedTabId = null;
 // The Native Messaging port to the native host (null = not connected).
 let port = null;
 
+// The reason the tab was last disarmed — shown in the popup's disarmed state
+// so the user can always find out why, even after missing the notification.
+let lastDisarmReason = null;
+
 // The last tab the user was on — updated by onActivated so the popup can
 // find it even when opening a popup shifts the "current window" context.
 let lastActiveTabId = null;
 browser.tabs.query({ active: true, currentWindow: true }).then(([t]) => { if (t) lastActiveTabId = t.id; });
 browser.tabs.onActivated.addListener(({ tabId }) => { lastActiveTabId = tabId; });
+
+// Restore armed state after an extension reload or browser restart.
+// Without this, any restart silently clears the armed tab with no notification.
+browser.storage.local.get('armedTabId').then(({ armedTabId: savedId }) => {
+    if (savedId == null) return;
+    browser.tabs.get(savedId)
+        .then(() => arm(savedId))
+        .catch(() => browser.storage.local.remove('armedTabId'));
+});
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
@@ -103,6 +116,8 @@ async function arm(tabId) {
     }
 
     armedTabId = tabId;
+    lastDisarmReason = null;
+    browser.storage.local.set({ armedTabId: tabId });
     browser.browserAction.setBadgeText({ text: 'ON', tabId });
     browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
     notify('FetchGate Armed', 'Tab is ready — requests will be routed through this tab.');
@@ -115,6 +130,8 @@ async function arm(tabId) {
 
 function disarm(tabId, reason) {
     armedTabId = null;
+    lastDisarmReason = reason || null;
+    browser.storage.local.remove('armedTabId');
     browser.browserAction.setBadgeText({ text: '', tabId });
     if (reason) notify('FetchGate Disarmed', reason);
     console.log('[FetchGate] Tab disarmed:', tabId);
@@ -123,7 +140,7 @@ function disarm(tabId, reason) {
 // Called by popup.js — let variables are not properties of window,
 // so bg.armedTabId / bg.port would return undefined.
 function getState() {
-    return { armedTabId, portConnected: !!port };
+    return { armedTabId, portConnected: !!port, lastDisarmReason };
 }
 
 // Returns the tab the user was on when they opened the popup.
@@ -174,7 +191,7 @@ browser.commands.onCommand.addListener((command) => {
         if (armedTabId === tab.id && port !== null) {
             disarm(tab.id, 'Tab has been disarmed.');
         } else {
-            if (armedTabId !== null) disarm(armedTabId);
+            if (armedTabId !== null) disarm(armedTabId, 'Switched to a different tab.');
             arm(tab.id);
         }
     });
@@ -203,7 +220,6 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
                    // Re-apply the badge — Firefox resets per-tab badge text on navigation.
                    browser.browserAction.setBadgeText({ text: 'ON', tabId });
                    browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
-                   notify('FetchGate Re-armed', 'Tab navigated — content script re-injected successfully.');
                })
                .catch(e => {
                    console.error('[FetchGate] Re-inject after navigation failed:', e.message);
