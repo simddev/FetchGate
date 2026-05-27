@@ -121,6 +121,19 @@ class TestWrite(unittest.TestCase):
         with self.assertRaises(FetchGateError):
             fg._write({"url": "/"})
 
+    def test_raises_fetchgate_error_on_broken_flush(self):
+        # OSError from flush() (not write()) must also surface as FetchGateError.
+        class FlushBrokenStream:
+            def write(self, _): pass
+            def flush(self): raise BrokenPipeError("flush failed")
+
+        fg = FetchGate.__new__(FetchGate)
+        fg._out = FlushBrokenStream()
+        fg._in  = io.BytesIO()
+        fg._seq = 0
+        with self.assertRaises(FetchGateError):
+            fg._write({"url": "/"})
+
 
 # ── NM framing: _read ─────────────────────────────────────────────────────────
 
@@ -255,6 +268,13 @@ class TestFetch(unittest.TestCase):
         fg._seq = 0
         with self.assertRaises(FetchGateError):
             fg.fetch({"url": "/"})
+
+    def test_fetch_raises_fetchgate_size_error_for_oversized_request(self):
+        # fetch() must propagate FetchGateSizeError when the serialised envelope
+        # exceeds 1 MB — the NM connection stays alive, so the caller can retry.
+        fg, _ = make_fg()
+        with self.assertRaises(FetchGateSizeError):
+            fg.fetch({"body": "x" * (1024 * 1024 + 1)})
 
     def test_spec_with_all_fields(self):
         spec = {

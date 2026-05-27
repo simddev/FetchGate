@@ -1,5 +1,11 @@
 # FetchGate
 
+<p align="center">
+  <img src="docs/popup_disarmed.png" alt="FetchGate popup — disarmed" width="261">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/popup_armed.png" alt="FetchGate popup — armed" width="261">
+</p>
+
 A Firefox WebExtension that bridges an external process to a live,
 logged-in browser tab — execute authenticated HTTP requests or run arbitrary
 JavaScript inside the tab, inheriting its full session state.
@@ -242,7 +248,7 @@ Full step-by-step instructions for all hosts are in **[INSTALL.md](INSTALL.md)**
 
 ### Step 1 — Install the extension
 
-Download **[fetchgate-0.1.8.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
+Download **[fetchgate-0.2.0.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
 
 - **Drag and drop:** drag the `.xpi` file into any browser window and click **Add** when prompted.
 - **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ → **Install Add-on From File**, and select the `.xpi`.
@@ -281,6 +287,37 @@ Choose one host and follow its quick summary below. Full instructions are in [IN
 3. Copy `fetchgate_py.json` to `~/.mozilla/native-messaging-hosts/fetchgate.json`
    and set `"path"` to your script
 
+## Interface
+
+FetchGate is controlled through a toolbar popup and a configurable keyboard shortcut.
+
+### Toolbar popup
+
+Click the FetchGate icon to open the popup. It shows the current state and
+offers a single context-appropriate action:
+
+| State | Badge | What you see | Action |
+|---|---|---|---|
+| Disarmed | *(none)* | No tab is armed | **Arm this tab** |
+| Armed — this tab | **ON** (green) | Domain · Host: connected | **Disarm** |
+| Host disconnected | **ERR** (red) | Domain · Click Reconnect… | **Reconnect** |
+| Armed — other tab | **ON** or **ERR** | Other domain | **Arm this tab instead** |
+
+The popup refreshes every 750 ms while it is open, so it always reflects the
+latest state even if the tab was armed or disarmed via keyboard shortcut while
+the popup was visible.
+
+### Keyboard shortcut
+
+The default shortcut is **Ctrl+Shift+F**. It toggles arm/disarm on the active tab
+without opening the popup.
+
+To change the shortcut: open the FetchGate popup → click the shortcut display
+at the bottom → press the new key combination. After saving, FetchGate asks you
+to press the shortcut once to verify it works — some combinations are silently
+captured by Firefox or the desktop environment before the extension sees them,
+and this step catches those conflicts.
+
 ## Usage
 
 ### Java host / Python TCP host
@@ -288,8 +325,8 @@ Choose one host and follow its quick summary below. Full instructions are in [IN
 Both hosts expose the same `localhost:9919` TCP interface. Usage is identical:
 
 1. Navigate to the site you want to query (log in if needed)
-2. Click the **FetchGate** toolbar button — Firefox starts the host and
-   the badge turns green **ON**
+2. Click the **FetchGate** toolbar button and then **Arm this tab**, or press
+   **Ctrl+Shift+F** — Firefox starts the host and the badge turns green **ON**
 3. From any terminal or program, send a JSON line to `localhost:9919`:
 
 ```bash
@@ -307,8 +344,9 @@ will return an error even on a healthy setup.
 ### Python embedded host
 
 1. Navigate to the target site (log in if needed)
-2. Click the **FetchGate** toolbar button — Firefox immediately launches your
-   Python script; the badge turns green **ON** while it runs
+2. Click the **FetchGate** toolbar button and then **Arm this tab**, or press
+   **Ctrl+Shift+F** — Firefox immediately launches your Python script; the
+   badge turns green **ON** while it runs
 3. Your script calls `fg.fetch()` and does whatever it needs with the results
 4. When the script exits, the badge shows **ERR** — this is normal
 
@@ -334,7 +372,7 @@ if "error" not in resp:
     sys.__stdout__.flush()
 ```
 
-Click the toolbar button again to re-run the script.
+Open the popup and click **Arm this tab** again, or press **Ctrl+Shift+F**, to re-run the script.
 
 ## Building and testing
 
@@ -352,7 +390,7 @@ java  -cp out TestRunner
 **Python hosts:**
 
 ```bash
-# NM library (29 tests, no external dependencies)
+# NM library (31 tests, no external dependencies)
 python3 host_py/test_fetchgate.py
 
 # Python TCP host (16 tests, no external dependencies)
@@ -414,8 +452,7 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
 
 - **One armed tab at a time.** The extension tracks a single armed tab. Arming
   a second tab automatically disarms the first. After a disconnect (ERR badge),
-  one toolbar click re-arms the tab and reconnects the host — no double-click
-  needed.
+  open the popup and click **Reconnect** to restore the connection.
 
 - **Extension reloads on browser restart — if loaded as a temporary add-on.**
   Temporary add-ons (loaded via `about:debugging`) do not survive browser
@@ -475,13 +512,15 @@ host_py/                Python native hosts
   fetchgate.py          Native Messaging library; import this in your script
   example.py            Working example script to copy and customise (embedded host)
   fetchgate_tcp_host.py Python TCP host — drop-in replacement for the Java host
-  test_fetchgate.py     Python test suite — NM library (29 tests, no external framework)
+  test_fetchgate.py     Python test suite — NM library (31 tests, no external framework)
   test_fetchgate_tcp_host.py  Python test suite — TCP host (16 tests, no external framework)
 
 extension/              WebExtension — shared by both hosts, never changes
   manifest.json         MV2 manifest; extension ID: fetchgate@localhost
   background.js         Armed-tab state, connectNative(), message routing
   content_script.js     Executes fetch() or arbitrary JS in the tab, returns the result
+  popup.html            Toolbar popup markup
+  popup.js              Popup logic — state display, button actions, shortcut recorder
 
 tests/                  Java test suite (no external framework)
   TestRunner.java       Runner and output harness
@@ -494,7 +533,7 @@ Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python embedded host
 fetchgate_tcp_py.json   Native Messaging manifest template — Python TCP host
-fetchgate-0.1.8.xpi     Signed extension — install directly in Firefox or LibreWolf
+fetchgate-0.2.0.xpi     Signed extension — install directly in Firefox or LibreWolf
 INSTALL.md              Step-by-step installation guide
 ```
 

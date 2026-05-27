@@ -7,6 +7,12 @@ let armedTabId = null;
 // The Native Messaging port to the native host (null = not connected).
 let port = null;
 
+// The last tab the user was on — updated by onActivated so the popup can
+// find it even when opening a popup shifts the "current window" context.
+let lastActiveTabId = null;
+browser.tabs.query({ active: true, currentWindow: true }).then(([t]) => { if (t) lastActiveTabId = t.id; });
+browser.tabs.onActivated.addListener(({ tabId }) => { lastActiveTabId = tabId; });
+
 // ─── Notifications ───────────────────────────────────────────────────────────
 
 function notify(title, message) {
@@ -85,21 +91,6 @@ async function onRequestFromHost(msg) {
 
 // ─── Tab arming ──────────────────────────────────────────────────────────────
 
-// Toolbar button clicked: toggle armed state for the current tab.
-// When the tab is armed but the native host has disconnected (ERR badge,
-// port === null), clicking the same tab re-arms rather than disarming —
-// one click reconnects instead of requiring disarm + arm.
-browser.browserAction.onClicked.addListener(async (tab) => {
-    if (armedTabId === tab.id && port !== null) {
-        // Tab is armed and the native host is connected — toggle off.
-        disarm(tab.id, 'Tab has been disarmed.');
-    } else {
-        // Arm, or re-arm after ERR: disarm whatever was armed first (if anything).
-        if (armedTabId !== null) disarm(armedTabId);
-        await arm(tab.id);
-    }
-});
-
 async function arm(tabId) {
     // Inject first: only mark the tab armed if injection actually succeeds.
     // On privileged pages (about:*, browser settings) executeScript throws —
@@ -129,6 +120,66 @@ function disarm(tabId, reason) {
     console.log('[FetchGate] Tab disarmed:', tabId);
 }
 
+// Called by popup.js — let variables are not properties of window,
+// so bg.armedTabId / bg.port would return undefined.
+function getState() {
+    return { armedTabId, portConnected: !!port };
+}
+
+// Returns the tab the user was on when they opened the popup.
+// popup.js cannot query this itself — opening the popup shifts the
+// "current window" context so any query there returns the popup window (no tabs).
+async function getActiveTab() {
+    if (lastActiveTabId !== null) {
+        try { return await browser.tabs.get(lastActiveTabId); } catch (_) {}
+    }
+    // Fallback: find the active tab in a focused normal browser window.
+    const windows = await browser.windows.getAll({ populate: true, windowTypes: ['normal'] });
+    const win = windows.find(w => w.focused) || windows[0];
+    return win?.tabs?.find(t => t.active) || null;
+}
+
+// ─── Keyboard shortcut ───────────────────────────────────────────────────────
+
+// After popup.js sets a new shortcut it calls startShortcutVerification().
+// The next onCommand fire within 10 s is treated as the confirmation press rather
+// than an arm/disarm, so we know Firefox and the OS are actually passing the key
+// through to the extension — something the commands API can't tell us directly.
+let shortcutVerifyState = null;
+
+function startShortcutVerification(shortcut) {
+    if (shortcutVerifyState) clearTimeout(shortcutVerifyState.timeoutId);
+    const timeoutId = setTimeout(() => {
+        shortcutVerifyState = null;
+        notify('FetchGate — Shortcut Warning',
+               `"${shortcut}" didn't respond. It likely conflicts with Firefox or your OS. Open FetchGate to try another.`);
+    }, 10000);
+    shortcutVerifyState = { shortcut, timeoutId };
+    notify('FetchGate — Shortcut Set', `Press ${shortcut} now to verify it works.`);
+}
+
+browser.commands.onCommand.addListener((command) => {
+    if (command !== 'toggle-arm') return;
+
+    if (shortcutVerifyState) {
+        const { shortcut, timeoutId } = shortcutVerifyState;
+        clearTimeout(timeoutId);
+        shortcutVerifyState = null;
+        notify('FetchGate — Shortcut Confirmed', `${shortcut} is working correctly.`);
+        return;
+    }
+
+    browser.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+        if (!tab) return;
+        if (armedTabId === tab.id && port !== null) {
+            disarm(tab.id, 'Tab has been disarmed.');
+        } else {
+            if (armedTabId !== null) disarm(armedTabId);
+            arm(tab.id);
+        }
+    });
+});
+
 // ─── Tab lifecycle ───────────────────────────────────────────────────────────
 
 // If the armed tab is closed, clear state.
@@ -146,6 +197,9 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
     if (tabId === armedTabId && changeInfo.status === 'complete') {
         browser.tabs.executeScript(tabId, { file: 'content_script.js' })
                .then(() => {
+                   // Guard: the user may have disarmed (or armed a different tab) while
+                   // executeScript was awaiting. Only act if this tab is still armed.
+                   if (tabId !== armedTabId) return;
                    // Re-apply the badge — Firefox resets per-tab badge text on navigation.
                    browser.browserAction.setBadgeText({ text: 'ON', tabId });
                    browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
@@ -153,7 +207,12 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
                })
                .catch(e => {
                    console.error('[FetchGate] Re-inject after navigation failed:', e.message);
-                   disarm(tabId, 'The tab navigated to a restricted page — re-arm to continue.');
+                   // Same guard: disarm only if this tab is still the armed one.
+                   // Without this check, a stale catch() could call disarm() and clear
+                   // armedTabId even though a different tab was already armed successfully.
+                   if (tabId === armedTabId) {
+                       disarm(tabId, 'The tab navigated to a restricted page — re-arm to continue.');
+                   }
                });
     }
 });
