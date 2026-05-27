@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      width: 260px;
+      background: #1e1e1e;
+      color: #e0e0e0;
+    }
+
+    /* ── Header ── */
+    #header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid #2e2e2e;
+    }
+    #header img { width: 20px; height: 20px; }
+    #header span { font-weight: 600; font-size: 14px; letter-spacing: 0.02em; }
+
+    /* ── Status block ── */
+    #status-block {
+      padding: 12px 14px;
+      border-bottom: 1px solid #2e2e2e;
+    }
+
+    #status-line {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 5px;
+    }
+
+    #dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-armed   { background: #00cc55; }
+    .dot-disarmed { background: #666; }
+    .dot-error   { background: #cc3333; }
+
+    #status-label { }
+
+    #status-detail {
+      padding-left: 16px;
+      color: #999;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* ── Action button ── */
+    #action-block {
+      padding: 10px 14px;
+      border-bottom: 1px solid #2e2e2e;
+    }
+
+    #action-btn {
+      width: 100%;
+      padding: 7px 0;
+      border: none;
+      border-radius: 5px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    #action-btn:hover { opacity: 0.85; }
+    #action-btn:active { opacity: 0.7; }
+
+    .btn-disarm    { background: #444; color: #e0e0e0; }
+    .btn-arm       { background: #00aa44; color: #fff; }
+    .btn-reconnect { background: #994400; color: #fff; }
+    .btn-switch    { background: #226699; color: #fff; }
+
+    /* ── Options section (future features slot in here) ── */
+    #options-block {
+      padding: 10px 14px;
+    }
+
+    .option-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+      color: #888;
+      font-size: 12px;
+    }
+
+    #shortcut-row {
+      cursor: pointer;
+      color: #bbb;
+    }
+    #shortcut-row:hover { color: #fff; }
+
+    #shortcut-val.recording {
+      background: #1a3a5c;
+      color: #88bbff;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    #shortcut-val.success { background: #0a3a1a; color: #00cc55; }
+    #shortcut-val.error   { background: #3a1a1a; color: #ff6666; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.5; }
+    }
+    #shortcut-row #shortcut-val {
+      font-family: monospace;
+      font-size: 11px;
+      background: #2e2e2e;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    /* placeholder styling — remove when features are wired up */
+    .option-row.placeholder {
+      opacity: 0.4;
+      cursor: default;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <img src="icon.svg" alt="">
+    <span>FetchGate</span>
+  </div>
+
+  <div id="status-block">
+    <div id="status-line">
+      <div id="dot"></div>
+      <span id="status-label">Loading…</span>
+    </div>
+    <div id="status-detail"></div>
+  </div>
+
+  <div id="action-block">
+    <button id="action-btn"></button>
+  </div>
+
+  <div id="options-block">
+    <div class="option-row" id="shortcut-row" title="Change in: about:addons → Manage Extension Shortcuts">
+      <span>Shortcut</span>
+      <span id="shortcut-val">—</span>
+    </div>
+    <div class="option-row placeholder">
+      <span>Auto-arm this URL</span>
+      <span>coming soon</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
