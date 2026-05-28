@@ -6,7 +6,7 @@ FetchGate is a Firefox/LibreWolf WebExtension that bridges an external process t
 
 Use case: extracting your own data from websites that actively prevent it.
 
-Two native host implementations are provided — Java and Python. Both work with the same, unchanged extension.
+Three native host implementations are provided — Java, Python TCP, and Python embedded. All work with the same, unchanged extension.
 
 ## Architecture
 
@@ -143,7 +143,7 @@ When the armed tab navigates, `tabs.onUpdated` fires `executeScript` to re-injec
 
 ## Components / Deliverables
 
-- `extension/manifest.json` — WebExtension manifest (permissions: `nativeMessaging`, `notifications`, `activeTab`, `tabs`, `<all_urls>`)
+- `extension/manifest.json` — WebExtension manifest (permissions: `nativeMessaging`, `notifications`, `storage`, `activeTab`, `tabs`, `<all_urls>`)
 - `extension/background.js` — manages "armed tab" state, Native Messaging connection, routes messages to content script
 - `extension/content_script.js` — executes `fetch()` or arbitrary JS in tab context, returns result
 - `extension/popup.html` — toolbar popup markup
