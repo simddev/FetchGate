@@ -49,7 +49,7 @@ the extension and your code. Three implementations are provided:
 | Good for | Callers in any language, interactive use, multiple scripts | Callers in any language when Java is not available | A single Python script with a specific job |
 | Start it | Firefox starts it automatically on first arm | Firefox starts it automatically on first arm | Firefox starts it automatically when you arm a tab |
 
-Both hosts speak the same protocol to the extension. The extension code is
+All three hosts speak the same protocol to the extension. The extension code is
 identical regardless of which host you use.
 
 ## Architecture
@@ -170,6 +170,9 @@ same envelope — only the contents of `req` differ (`{"url":...}` vs `{"js":...
   content script.
 - `notifications` — sends desktop notifications when a tab is armed or
   disarmed, and when the native host process disconnects unexpectedly.
+- `storage` — persists the armed tab ID in `browser.storage.local` so the
+  extension can restore state after a browser restart or extension reload,
+  rather than silently losing the armed tab.
 
 **Design constraint:** the extension is intentionally minimal. Its only job is
 to execute what the native host asks — a `fetch()` call or a JavaScript snippet
@@ -248,7 +251,7 @@ Full step-by-step instructions for all hosts are in **[INSTALL.md](INSTALL.md)**
 
 ### Step 1 — Install the extension
 
-Download **[fetchgate-0.2.0.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
+Download **[fetchgate-0.2.1.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
 
 - **Drag and drop:** drag the `.xpi` file into any browser window and click **Add** when prompted.
 - **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ → **Install Add-on From File**, and select the `.xpi`.
@@ -533,7 +536,7 @@ Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python embedded host
 fetchgate_tcp_py.json   Native Messaging manifest template — Python TCP host
-fetchgate-0.2.0.xpi     Signed extension — install directly in Firefox or LibreWolf
+fetchgate-0.2.1.xpi     Signed extension — install directly in Firefox or LibreWolf
 INSTALL.md              Step-by-step installation guide
 ```
 
