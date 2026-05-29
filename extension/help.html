@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>FetchGate — Host Setup</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      background: #1a1a1a;
+      color: #ddd;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 24px;
+      background: #1e1e1e;
+      border-bottom: 1px solid #2e2e2e;
+    }
+    header img { width: 20px; height: 20px; }
+    header .title { font-weight: 600; font-size: 15px; }
+    header .sep { color: #555; }
+    header .subtitle { color: #999; font-weight: 400; }
+
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 28px 24px 56px;
+    }
+
+    h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #eee;
+      margin: 36px 0 12px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #2e2e2e;
+    }
+    h2:first-child { margin-top: 0; }
+
+    h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #ccc;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin: 20px 0 8px;
+    }
+
+    p { margin: 8px 0; color: #aaa; }
+
+    a { color: #5599ee; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* comparison table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 14px 0;
+    }
+    th {
+      background: #252525;
+      padding: 8px 10px;
+      text-align: left;
+      color: #ccc;
+      border: 1px solid #333;
+      font-size: 13px;
+    }
+    td {
+      padding: 7px 10px;
+      border: 1px solid #2a2a2a;
+      color: #999;
+      vertical-align: top;
+    }
+    td:first-child { color: #ddd; font-weight: 500; white-space: nowrap; }
+    tr:nth-child(even) td { background: #1e1e1e; }
+
+    /* code */
+    pre {
+      background: #141414;
+      border: 1px solid #272727;
+      border-radius: 5px;
+      padding: 11px 14px;
+      margin: 10px 0;
+      overflow-x: auto;
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    code { font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace; color: #c8d3e8; }
+    p code, li code {
+      background: #252525;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 12px;
+      color: #aaddff;
+    }
+
+    /* lists */
+    ul, ol { margin: 8px 0 8px 22px; color: #999; }
+    li { margin: 4px 0; }
+    li code { font-size: 12px; }
+
+    /* callout */
+    .note {
+      background: #1c2533;
+      border-left: 3px solid #3a6599;
+      padding: 10px 14px;
+      margin: 12px 0;
+      border-radius: 0 4px 4px 0;
+      font-size: 13px;
+      color: #99bbdd;
+    }
+    .note code { font-size: 12px; }
+
+    /* steps */
+    .steps { margin: 12px 0; }
+    .step { display: flex; gap: 14px; margin: 14px 0; }
+    .step-num {
+      flex-shrink: 0;
+      width: 22px;
+      height: 22px;
+      background: #2a2a3a;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #aac;
+      margin-top: 1px;
+    }
+    .step-body { flex: 1; }
+    .step-body > strong { display: block; margin-bottom: 4px; color: #ccc; }
+
+    /* github link */
+    .github-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      padding: 8px 14px;
+      background: #222;
+      border: 1px solid #3a3a3a;
+      border-radius: 5px;
+      color: #bbb;
+      font-size: 13px;
+    }
+    .github-link:hover { background: #2a2a2a; color: #fff; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <img src="icon.svg" alt="">
+  <span class="title">FetchGate</span>
+  <span class="sep">—</span>
+  <span class="subtitle">Host Setup</span>
+</header>
+
+<main>
+
+  <h2>What is the native host?</h2>
+  <p>FetchGate requires a <strong style="color:#ddd">native host</strong> — a small program that Firefox launches on your machine when you arm a tab. The extension alone can arm a tab and route requests through it; the host is the bridge between the extension and your own code. Without it, the tab will arm but has no way to receive requests from outside the browser.</p>
+  <p>Firefox communicates with the host over stdin/stdout (Firefox Native Messaging). Your code communicates with the host over TCP — or, with the embedded Python host, your script is the host and Firefox launches it directly.</p>
+
+  <h2>Choose a host</h2>
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Java host</th>
+        <th>Python TCP host</th>
+        <th>Python embedded host</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Requires</td>
+        <td>JDK 21+, or Docker</td>
+        <td>Python 3.6+</td>
+        <td>Python 3.6+</td>
+      </tr>
+      <tr>
+        <td>Your code calls it via</td>
+        <td>TCP <code>localhost:9919</code> from any language</td>
+        <td>TCP <code>localhost:9919</code> from any language</td>
+        <td>Your Python script IS the host; Firefox launches it</td>
+      </tr>
+      <tr>
+        <td>Persistent server</td>
+        <td>Yes — stays running until Firefox exits</td>
+        <td>Yes — stays running until Firefox exits</td>
+        <td>No — script runs once and exits</td>
+      </tr>
+      <tr>
+        <td>Good for</td>
+        <td>Any language, multi-script workflows, interactive use</td>
+        <td>Same as Java host when Java is not available</td>
+        <td>A single Python script with a specific job</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note">Only one host can be active at a time. All three install to the same file: <code>~/.mozilla/native-messaging-hosts/fetchgate.json</code>. To switch hosts, overwrite that file with the other template and reload the extension in <code>about:debugging</code>.</div>
+
+  <h2 id="java">Java host</h2>
+  <p>A persistent TCP server on <code>localhost:9919</code>. Callers connect from any language. Can run directly with a JDK or via Docker (no JDK needed).</p>
+
+  <h3>Option A — Direct (JDK 21+ required)</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Clone and compile</strong>
+        <pre><code>git clone https://github.com/simddev/FetchGate
+cd FetchGate
+javac -d out src/*.java</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Create a launcher script</strong>
+        <p>Firefox must launch an executable — create <code>~/bin/fetchgate.sh</code>:</p>
+        <pre><code>#!/bin/bash
+exec java -cp "/absolute/path/to/FetchGate/out" Main</code></pre>
+        <pre><code>chmod +x ~/bin/fetchgate.sh</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Register the native host</strong>
+        <pre><code>mkdir -p ~/.mozilla/native-messaging-hosts
+cp fetchgate.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code></pre>
+        <p>Open <code>~/.mozilla/native-messaging-hosts/fetchgate.json</code> and set the <code>path</code>:</p>
+        <pre><code>"path": "/home/you/bin/fetchgate.sh"</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <h3>Option B — Docker (no JDK required)</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Clone and build the image</strong>
+        <pre><code>git clone https://github.com/simddev/FetchGate
+cd FetchGate
+docker build -t fetchgate .</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Create a launcher script</strong>
+        <p>Create <code>~/bin/fetchgate.sh</code>:</p>
+        <pre><code>#!/bin/bash
+exec docker run --rm -i --network=host fetchgate</code></pre>
+        <pre><code>chmod +x ~/bin/fetchgate.sh</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Register the native host</strong> — same as Option A, step 3 above.
+      </div>
+    </div>
+  </div>
+
+  <h3>Smoke test</h3>
+  <p>Arm a tab, then:</p>
+  <pre><code>echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919</code></pre>
+  <p>You should get back one JSON line with <code>status</code>, <code>headers</code>, and <code>body</code>. <code>timeout 3</code> is needed because the Java host keeps connections open — without it, <code>nc</code> hangs waiting for more data after the response.</p>
+
+  <h2 id="python-tcp">Python TCP host</h2>
+  <p>A pure-Python drop-in replacement for the Java host. Same TCP interface on <code>localhost:9919</code> — any caller that works with the Java host works unchanged. No JDK needed.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Get the script</strong>
+        <pre><code>git clone https://github.com/simddev/FetchGate
+chmod +x FetchGate/host_py/fetchgate_tcp_host.py</code></pre>
+        <p>Or copy <code>host_py/fetchgate_tcp_host.py</code> to a permanent location and <code>chmod +x</code> it there.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Register the native host</strong>
+        <pre><code>mkdir -p ~/.mozilla/native-messaging-hosts
+cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code></pre>
+        <p>Set <code>path</code> to the absolute path of <code>fetchgate_tcp_host.py</code>:</p>
+        <pre><code>"path": "/absolute/path/to/fetchgate_tcp_host.py"</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <h3>Smoke test</h3>
+  <p>Arm a tab, then:</p>
+  <pre><code>echo '{"method":"GET","url":"/robots.txt"}' | nc localhost 9919</code></pre>
+
+  <h2 id="python-embedded">Python embedded host</h2>
+  <p>Your Python script IS the native host. Firefox launches it when you arm a tab. No persistent server — the script runs once and exits. Ideal for targeted one-off data extraction jobs.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <strong>Copy the example script</strong>
+        <pre><code>cp FetchGate/host_py/example.py ~/bin/my_scraper.py
+chmod +x ~/bin/my_scraper.py</code></pre>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <strong>Edit your script</strong>
+        <p>Keep the imports and <code>FetchGate()</code> constructor. Everything after is your code:</p>
+        <pre><code>#!/usr/bin/env python3
+import sys, os
+sys.path.insert(0, "/absolute/path/to/FetchGate/host_py")
+from fetchgate import FetchGate, FetchGateError
+
+fg = FetchGate()
+
+# Fetch mode — authenticated HTTP request via the tab
+resp = fg.fetch({"method": "GET", "url": "/api/data"})
+print(resp["status"], resp["body"])
+
+# JS mode — run arbitrary JavaScript in the tab
+resp = fg.fetch({"js": "return document.title"})
+print(resp["result"])</code></pre>
+        <div class="note"><strong>stdout is redirected.</strong> After <code>FetchGate()</code> is constructed, <code>sys.stdout</code> is redirected to <code>sys.stderr</code> to prevent accidental <code>print()</code> calls from corrupting the NM stream. Use <code>sys.__stdout__</code> to write output you want to capture from outside the browser.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <strong>Register the native host</strong>
+        <pre><code>mkdir -p ~/.mozilla/native-messaging-hosts
+cp fetchgate_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code></pre>
+        <p>Set <code>path</code> to your script:</p>
+        <pre><code>"path": "/home/you/bin/my_scraper.py"</code></pre>
+        <p>The script must be executable (<code>chmod +x</code>) and must have a shebang line (<code>#!/usr/bin/env python3</code>) — Firefox uses the shebang to launch it.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <strong>Run it</strong>
+        <p>Navigate to the target website, then arm the tab (click the toolbar button). Firefox launches your script immediately. The badge turns <strong>ERR</strong> when your script finishes — that is expected (the NM connection closed because the script exited). Click the toolbar button again to re-arm and re-run.</p>
+      </div>
+    </div>
+  </div>
+
+  <h2 id="custom">Writing your own host</h2>
+  <p>Any process that speaks Firefox Native Messaging can work with this extension. The wire format:</p>
+  <ul>
+    <li>4-byte little-endian unsigned length header + UTF-8 JSON payload</li>
+    <li>Firefox enforces a hard 1 MB per-message cap</li>
+  </ul>
+  <p>The extension sends a request envelope and expects a matching reply:</p>
+  <pre><code>// Request from the extension to your host
+{"__fg_id": 1, "req": "{\"method\":\"GET\",\"url\":\"/api/data\"}"}
+
+// Fetch mode reply — echo __fg_id, spread response fields
+{"__fg_id": 1, "status": 200, "statusText": "OK", "headers": {...}, "body": "..."}
+
+// JS mode reply
+{"__fg_id": 1, "result": "..."}
+
+// Error
+{"__fg_id": 1, "error": "description"}</code></pre>
+  <p><code>req</code> is the caller's JSON serialized as a string so the extension can delegate JSON validation to <code>JSON.parse()</code>. Echo <code>__fg_id</code> in every reply so the extension can match responses to requests and discard stale ones from a previous connection.</p>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+
+  <h3>Badge shows ERR immediately after arming</h3>
+  <p>The native host failed to start. Check:</p>
+  <ul>
+    <li><code>~/.mozilla/native-messaging-hosts/fetchgate.json</code> exists</li>
+    <li>The <code>path</code> in that file is an absolute path to an executable file</li>
+    <li>The executable has <code>chmod +x</code> and (for Python scripts) a <code>#!/usr/bin/env python3</code> shebang</li>
+    <li>You reloaded the extension after editing the manifest (go to <code>about:debugging</code> → This Firefox → FetchGate → Reload)</li>
+  </ul>
+  <p>Open the background console for detailed errors: <code>about:debugging</code> → <strong>This Firefox</strong> → FetchGate → <strong>Inspect</strong> → Console.</p>
+
+  <h3>Switching between hosts</h3>
+  <pre><code># Switch to Java host
+cp fetchgate.json ~/.mozilla/native-messaging-hosts/fetchgate.json
+# edit "path" to point to fetchgate.sh
+
+# Switch to Python TCP host
+cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
+# edit "path" to point to fetchgate_tcp_host.py
+
+# Switch to Python embedded host
+cp fetchgate_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
+# edit "path" to point to your script</code></pre>
+  <p>After switching, reload the extension in <code>about:debugging</code>.</p>
+
+  <p style="margin-top: 32px;">
+    <a class="github-link" href="https://github.com/simddev/FetchGate" target="_blank">↗ Full documentation on GitHub</a>
+  </p>
+
+</main>
+</body>
+</html>

@@ -20,6 +20,13 @@ async function init() {
     // Refresh status while the popup is open — catches arm/disarm via keyboard shortcut.
     setInterval(renderStatus, 750);
 
+    // Open the host setup page when the user clicks any ? badge in the status detail.
+    statusDetail.addEventListener('click', (e) => {
+        if (e.target.classList.contains('host-help')) {
+            browser.tabs.create({ url: browser.runtime.getURL('help.html') });
+        }
+    });
+
     await refreshShortcut();
     shortcutRow.addEventListener('click', startRecording);
 }
@@ -49,7 +56,7 @@ async function renderStatus() {
         // ── Armed — this tab, host OK ─────────────────────────────
         setDot('armed');
         statusLabel.textContent = 'Armed';
-        statusDetail.innerHTML  = domain(armedTab) + '<br>Host: connected';
+        statusDetail.innerHTML  = domain(armedTab) + '<br>Host: connected <span class="host-help">?</span>';
         setBtn('disarm', 'Disarm', () => {
             bg.disarm(armedTabId, 'Tab has been disarmed.');
             window.close();
@@ -59,7 +66,9 @@ async function renderStatus() {
         // ── Armed — this tab, host disconnected ──────────────────
         setDot('error');
         statusLabel.textContent = 'Armed — host disconnected';
-        statusDetail.innerHTML  = domain(armedTab) + '<br>Click Reconnect to restore.';
+        statusDetail.innerHTML  = domain(armedTab) +
+            '<br>Host: not running <span class="host-help">?</span>' +
+            '<br><span style="color:#555;font-size:11px">Press ? for setup instructions.</span>';
         setBtn('reconnect', 'Reconnect', async () => {
             await bg.arm(armedTabId);
             window.close();
@@ -70,7 +79,10 @@ async function renderStatus() {
         setDot(portConnected ? 'armed' : 'error');
         statusLabel.textContent = 'Armed (other tab)';
         statusDetail.innerHTML  = domain(armedTab) +
-            (portConnected ? '<br>Host: connected' : '<br>Host: disconnected');
+            (portConnected
+                ? '<br>Host: connected <span class="host-help">?</span>'
+                : '<br>Host: not running <span class="host-help">?</span>' +
+                  '<br><span style="color:#555;font-size:11px">Press ? for setup instructions.</span>');
         setBtn('switch', 'Arm this tab instead', async () => {
             bg.disarm(armedTabId, 'Switched to a different tab.');
             if (currentTab) await bg.arm(currentTab.id);

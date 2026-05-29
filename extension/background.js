@@ -1,5 +1,12 @@
 'use strict';
 
+// Open the host setup page the first time the extension is installed.
+browser.runtime.onInstalled.addListener(({ reason }) => {
+    if (reason === 'install') {
+        browser.tabs.create({ url: browser.runtime.getURL('help.html') });
+    }
+});
+
 // The tab ID that is currently armed (null = no armed tab).
 // This is the single source of truth.
 let armedTabId = null;
@@ -41,21 +48,37 @@ function notify(title, message) {
 
 function connect() {
     port = browser.runtime.connectNative('fetchgate');
-
-    // A message from the host is a request (fetch or JS mode) from the external caller.
     port.onMessage.addListener(onRequestFromHost);
 
+    // Give the host 400 ms to stay alive before declaring the connection good.
+    // If the host binary is missing, Firefox disconnects the port within milliseconds —
+    // the timer lets us tell "host not found" apart from "host ran fine but later stopped".
+    // Capture armedTabId now: if the user arms a different tab before the timer fires,
+    // armedTabId will have changed and we must not fire a stale "Armed" notification.
+    let hostConfirmed = false;
+    const armedTabAtConnect = armedTabId;
+    const confirmTimer = setTimeout(() => {
+        hostConfirmed = true;
+        if (armedTabId !== null && armedTabId === armedTabAtConnect) {
+            notify('FetchGate Armed', 'Tab is ready — requests will be routed through this tab.');
+        }
+    }, 400);
+
     port.onDisconnect.addListener((p) => {
+        clearTimeout(confirmTimer);
         const err = p.error;
-        console.log('[FetchGate] Native host disconnected.',
-                    err ? err.message : '');
+        console.log('[FetchGate] Native host disconnected.', err ? err.message : '');
         port = null;
-        // Show an error badge so the user knows the host is gone while the tab is armed.
         if (armedTabId !== null) {
             browser.browserAction.setBadgeText({ text: 'ERR', tabId: armedTabId });
             browser.browserAction.setBadgeBackgroundColor({ color: '#cc0000', tabId: armedTabId });
-            notify('FetchGate — Native Host Disconnected',
-                   'The host process has stopped. Click the toolbar button to reconnect.');
+            if (!hostConfirmed) {
+                notify('FetchGate — Host Not Found',
+                       'The native host could not be started. Open the popup and press ? for setup instructions.');
+            } else {
+                notify('FetchGate — Native Host Disconnected',
+                       'The host process has stopped. Click the toolbar button to reconnect.');
+            }
         }
     });
 
@@ -120,10 +143,16 @@ async function arm(tabId) {
     browser.storage.local.set({ armedTabId: tabId });
     browser.browserAction.setBadgeText({ text: 'ON', tabId });
     browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
-    notify('FetchGate Armed', 'Tab is ready — requests will be routed through this tab.');
 
-    // Connect to the native host if not already connected (also handles re-arm after ERR).
-    if (!port) connect();
+    if (!port) {
+        // connect() defers the "Armed" notification by 400 ms so that if the host
+        // immediately fails, only one "host not found" notification fires instead of
+        // "Armed" followed immediately by "disconnected".
+        connect();
+    } else {
+        // Port already alive — host is confirmed running, notify immediately.
+        notify('FetchGate Armed', 'Tab is ready — requests will be routed through this tab.');
+    }
 
     console.log('[FetchGate] Tab armed:', tabId);
 }
