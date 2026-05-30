@@ -4,7 +4,7 @@
 
 The extension is the same regardless of which host you use. Install it first.
 
-Download **[fetchgate-0.2.2.xpi](https://github.com/simddev/FetchGate/releases/latest)**
+Download **[fetchgate-0.2.3.xpi](https://github.com/simddev/FetchGate/releases/latest)**
 from the Releases page, then install it using either method:
 
 - **Drag and drop:** drag the `.xpi` file into any Firefox or LibreWolf window
