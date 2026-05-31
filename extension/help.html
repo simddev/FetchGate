@@ -379,7 +379,7 @@ cp fetchgate_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code></pr
 
 // Error
 {"__fg_id": 1, "error": "description"}</code></pre>
-  <p><code>req</code> is the caller's JSON serialized as a string so the extension can delegate JSON validation to <code>JSON.parse()</code>. Echo <code>__fg_id</code> in every reply so the extension can match responses to requests and discard stale ones from a previous connection.</p>
+  <p><code>req</code> is the caller's JSON serialized as a string so the extension can delegate JSON validation to <code>JSON.parse()</code>. Echo <code>__fg_id</code> in every reply so the extension can match each response to its originating request.</p>
 
   <h2 id="troubleshooting">Troubleshooting</h2>
 

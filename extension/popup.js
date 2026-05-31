@@ -32,7 +32,7 @@ async function init() {
 }
 
 async function renderStatus() {
-    const { armedTabId, portConnected, lastDisarmReason } = bg.getState();
+    const { armedTabId, portConnected, lastDisarmReason, lastDisarmedTabId } = bg.getState();
 
     let armedTab = null;
     if (armedTabId !== null) {
@@ -46,7 +46,8 @@ async function renderStatus() {
         // ── Disarmed ─────────────────────────────────────────────
         setDot('disarmed');
         statusLabel.textContent  = 'Disarmed';
-        statusDetail.textContent = lastDisarmReason || 'No tab is currently armed.';
+        const onDisarmedTab = currentTab && currentTab.id === lastDisarmedTabId;
+        statusDetail.textContent = (onDisarmedTab && lastDisarmReason) || 'No tab is currently armed.';
         setBtn('arm', 'Arm this tab', async () => {
             if (currentTab) await bg.arm(currentTab.id);
             window.close();

@@ -14,9 +14,11 @@ let armedTabId = null;
 // The Native Messaging port to the native host (null = not connected).
 let port = null;
 
-// The reason the tab was last disarmed — shown in the popup's disarmed state
-// so the user can always find out why, even after missing the notification.
-let lastDisarmReason = null;
+// The reason the tab was last disarmed, and which tab it was.
+// Only shown in the popup when the popup is open on that same tab,
+// so unrelated tabs see a neutral "No tab is currently armed." instead.
+let lastDisarmReason  = null;
+let lastDisarmedTabId = null;
 
 // The last tab the user was on — updated by onActivated so the popup can
 // find it even when opening a popup shifts the "current window" context.
@@ -158,8 +160,9 @@ async function arm(tabId) {
 }
 
 function disarm(tabId, reason) {
-    armedTabId = null;
-    lastDisarmReason = reason || null;
+    armedTabId        = null;
+    lastDisarmReason  = reason || null;
+    lastDisarmedTabId = tabId;
     browser.storage.local.remove('armedTabId');
     browser.browserAction.setBadgeText({ text: '', tabId });
     if (reason) notify('FetchGate Disarmed', reason);
@@ -169,7 +172,7 @@ function disarm(tabId, reason) {
 // Called by popup.js — let variables are not properties of window,
 // so bg.armedTabId / bg.port would return undefined.
 function getState() {
-    return { armedTabId, portConnected: !!port, lastDisarmReason };
+    return { armedTabId, portConnected: !!port, lastDisarmReason, lastDisarmedTabId };
 }
 
 // Returns the tab the user was on when they opened the popup.
@@ -220,7 +223,10 @@ browser.commands.onCommand.addListener((command) => {
         if (armedTabId === tab.id && port !== null) {
             disarm(tab.id, 'Tab has been disarmed.');
         } else {
-            if (armedTabId !== null) disarm(armedTabId, 'Switched to a different tab.');
+            if (armedTabId !== null) {
+                // Don't fire "switched" when reconnecting the same tab from ERR state.
+                disarm(armedTabId, armedTabId === tab.id ? null : 'Switched to a different tab.');
+            }
             arm(tab.id);
         }
     });
