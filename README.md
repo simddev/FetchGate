@@ -249,7 +249,7 @@ Full step-by-step instructions for all hosts are in **[INSTALL.md](INSTALL.md)**
 
 ### Step 1 — Install the extension
 
-Download **[fetchgate-0.2.4.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
+Download **[fetchgate-0.2.6.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
 
 - **Drag and drop:** drag the `.xpi` file into any browser window and click **Add** when prompted.
 - **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ → **Install Add-on From File**, and select the `.xpi`.
@@ -534,7 +534,7 @@ Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python embedded host
 fetchgate_tcp_py.json   Native Messaging manifest template — Python TCP host
-fetchgate-0.2.5.xpi     Signed extension — install directly in Firefox or LibreWolf
+fetchgate-0.2.6.xpi     Signed extension — install directly in Firefox or LibreWolf
 INSTALL.md              Step-by-step installation guide
 ```
 

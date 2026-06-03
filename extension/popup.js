@@ -231,10 +231,17 @@ function eventToShortcut(e) {
 function domain(tab) {
     if (!tab) return '—';
     try {
-        return new URL(tab.url).hostname || tab.title || '—';
+        // Hostname is always HTML-safe (alphanumeric, dots, hyphens).
+        // tab.title is user-controlled and must be escaped before innerHTML use.
+        return new URL(tab.url).hostname || escHtml(tab.title) || '—';
     } catch (_) {
-        return tab.title || '—';
+        return escHtml(tab.title) || '—';
     }
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function setDot(state) {
