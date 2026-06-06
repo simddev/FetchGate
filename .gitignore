@@ -3,6 +3,9 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 .kotlin
+test/
+FetchGate.iml
+.idea/
 
 ### Eclipse ###
 .apt_generated
@@ -28,11 +31,6 @@ bin/
 
 ### Mac OS ###
 .DS_Store
-test/
-FetchGate.iml
-
-### IntelliJ IDEA project directory ###
-.idea/
 
 ### Compiled output ###
 *.class
@@ -47,3 +45,4 @@ devlog.md
 fg.py
 web-ext-artifacts/
 extension/.amo-upload-uuid
+*.xpi

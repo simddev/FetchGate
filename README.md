@@ -534,7 +534,6 @@ Dockerfile              Multi-stage build for the Java host (no JDK required)
 fetchgate.json          Native Messaging manifest template — Java host
 fetchgate_py.json       Native Messaging manifest template — Python embedded host
 fetchgate_tcp_py.json   Native Messaging manifest template — Python TCP host
-fetchgate-0.2.6.xpi     Signed extension — install directly in Firefox or LibreWolf
 INSTALL.md              Step-by-step installation guide
 ```
 
