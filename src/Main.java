@@ -3,7 +3,7 @@ import java.io.OutputStream;
 public class Main {
 
     public static void main(String[] args) throws Exception {
-        // Capture the real stdin/stdout FIRST — these are the Native Messaging channels.
+        // Capture the real stdin/stdout FIRST  -  these are the Native Messaging channels.
         // Firefox communicates with this process exclusively through these two streams.
         OutputStream nativeOut = System.out;
 

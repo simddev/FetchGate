@@ -1,6 +1,6 @@
 """FetchGate Python native host library.
 
-Your Python script IS the native host process — Firefox launches it via the
+Your Python script IS the native host process  -  Firefox launches it via the
 native messaging manifest when you arm a tab. Import this module, create a
 FetchGate instance, and call fetch() to send authenticated requests through
 the armed tab.
@@ -31,7 +31,7 @@ Notes
   and exits; to re-run it, click the toolbar button again to re-arm.
 - Responses with {"error": "..."} are returned normally, not raised.
   FetchGateError is raised if the NM connection is lost. FetchGateSizeError
-  (a subclass) is raised if a request exceeds the 1 MB NM limit — the
+  (a subclass) is raised if a request exceeds the 1 MB NM limit  -  the
   connection remains alive in that case.
 - There is no request timeout. fetch() blocks until the extension replies
   or the NM connection is closed. If the browser network request hangs
@@ -51,7 +51,7 @@ class FetchGateError(Exception):
 class FetchGateSizeError(FetchGateError):
     """Raised when a message exceeds the 1 MB Native Messaging limit.
 
-    A subclass of FetchGateError, but does NOT indicate a broken NM connection —
+    A subclass of FetchGateError, but does NOT indicate a broken NM connection  - 
     the connection remains alive and subsequent requests can succeed.
     """
 
@@ -72,7 +72,7 @@ class FetchGate:
         self._seq = 0
 
         # Redirect text stdout to stderr so accidental print() calls cannot
-        # corrupt the binary Native Messaging stream — same reason as the
+        # corrupt the binary Native Messaging stream  -  same reason as the
         # System.setOut(System.err) call in the Java host's Main.java.
         # The original stdout is still accessible via sys.__stdout__.
         sys.stdout = sys.stderr  # type: ignore[assignment]
@@ -82,7 +82,7 @@ class FetchGate:
 
         Two modes, selected by which key is present in spec:
 
-        Fetch mode — run fetch() in the tab and return the HTTP response:
+        Fetch mode  -  run fetch() in the tab and return the HTTP response:
             spec = {
                 "url":         "/api/data",          # required; absolute or relative
                 "method":      "GET",                # optional, default GET
@@ -91,9 +91,9 @@ class FetchGate:
                 "credentials": "same-origin",        # optional
             }
             Returns: {"status": 200, "statusText": "OK", "headers": {...}, "body": "..."}
-            body is always a string — parse it with json.loads() if needed.
+            body is always a string  -  parse it with json.loads() if needed.
 
-        JS mode — execute arbitrary JavaScript and return the result:
+        JS mode  -  execute arbitrary JavaScript and return the result:
             spec = {"js": "return document.title"}
             spec = {"js": "const r = await fetch('/api'); return await r.json();"}
             Returns: {"result": "..."}
@@ -125,7 +125,7 @@ class FetchGate:
             if msg.get("__fg_id") == req_id:
                 del msg["__fg_id"]
                 return msg
-            # Wrong ID — stale reply from a previous request; discard.
+            # Wrong ID  -  stale reply from a previous request; discard.
 
     # ── Internal NM framing ───────────────────────────────────────────────────
 
@@ -143,10 +143,10 @@ class FetchGate:
     def _read(self) -> Optional[dict]:
         # sys.stdin.buffer is a BufferedReader; BufferedReader.read(n) blocks
         # until exactly n bytes are available (non-interactive pipe), so short
-        # reads only occur on genuine EOF — not on partial arrival.
+        # reads only occur on genuine EOF  -  not on partial arrival.
         header = self._in.read(4)
         if len(header) < 4:
-            return None  # EOF — Firefox closed the connection
+            return None  # EOF  -  Firefox closed the connection
         length = struct.unpack("<I", header)[0]
         if length > self._MAX_BYTES:
             return None  # malformed / oversized frame
@@ -156,4 +156,4 @@ class FetchGate:
         try:
             return json.loads(payload.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError):
-            return None  # malformed frame — treat as lost connection
+            return None  # malformed frame  -  treat as lost connection

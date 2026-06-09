@@ -4,7 +4,7 @@
 Run from the project root:
     python3 host_py/test_fetchgate_tcp_host.py
 
-No external dependencies — standard library only.
+No external dependencies  -  standard library only.
 """
 
 import json
@@ -131,7 +131,7 @@ class TestHandleClientHappyPath(unittest.TestCase):
         self.assertEqual(fg.calls[0], spec)
 
     def test_error_response_from_fg_passed_through_as_is(self):
-        """FetchGate returns {"error": "..."} for browser-side errors — pass it through."""
+        """FetchGate returns {"error": "..."} for browser-side errors  -  pass it through."""
         fg = MockFetchGate([{"error": "no tab is armed"}])
         resp = run_handle_client(req({"url": "/"}), fg)
         self.assertEqual(resp, {"error": "no tab is armed"})
@@ -211,13 +211,13 @@ class TestHandleClientBadRequests(unittest.TestCase):
         self.assertEqual(fg.calls, [])
 
     def test_client_disconnect_before_newline_returns_nothing(self):
-        """Connection closed before a complete request — no response expected."""
+        """Connection closed before a complete request  -  no response expected."""
         fg = MockFetchGate([])
         nm_dead = threading.Event()
         lock = threading.Lock()
         server_sock, client_sock = socket.socketpair()
         try:
-            # Close without sending anything — server gets immediate EOF.
+            # Close without sending anything  -  server gets immediate EOF.
             client_sock.close()
             t = threading.Thread(
                 target=handle_client,
@@ -237,7 +237,7 @@ class TestHandleClientBadRequests(unittest.TestCase):
 class TestHandleClientNMFailure(unittest.TestCase):
 
     def test_fetchgate_size_error_returns_error_without_setting_nm_dead(self):
-        # FetchGateSizeError means the envelope was too large for NM — the
+        # FetchGateSizeError means the envelope was too large for NM  -  the
         # connection to Firefox is still alive. nm_dead must NOT be set.
         fg = MockFetchGate([FetchGateSizeError("Outgoing message too large: 1048700 bytes")])
         nm_dead = threading.Event()

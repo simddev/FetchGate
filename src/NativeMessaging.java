@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
  *
  *   [ 4 bytes, little-endian uint32: payload length ] [ N bytes: UTF-8 JSON ]
  *
- * This is the complete wire format — there is no envelope, header, or
+ * This is the complete wire format  -  there is no envelope, header, or
  * session layer beyond the length prefix. Firefox enforces a hard 1 MB
  * cap on individual message size.
  *

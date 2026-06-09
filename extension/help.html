@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>FetchGate — Host Setup</title>
+  <title>FetchGate  -  Host Setup</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -159,15 +159,15 @@
 <header>
   <img src="icon.svg" alt="">
   <span class="title">FetchGate</span>
-  <span class="sep">—</span>
+  <span class="sep"> - </span>
   <span class="subtitle">Host Setup</span>
 </header>
 
 <main>
 
   <h2>What is the native host?</h2>
-  <p>FetchGate requires a <strong style="color:#ddd">native host</strong> — a small program that Firefox launches on your machine when you arm a tab. The extension alone can arm a tab and route requests through it; the host is the bridge between the extension and your own code. Without it, the tab will arm but has no way to receive requests from outside the browser.</p>
-  <p>Firefox communicates with the host over stdin/stdout (Firefox Native Messaging). Your code communicates with the host over TCP — or, with the embedded Python host, your script is the host and Firefox launches it directly.</p>
+  <p>FetchGate requires a <strong style="color:#ddd">native host</strong>  -  a small program that Firefox launches on your machine when you arm a tab. The extension alone can arm a tab and route requests through it; the host is the bridge between the extension and your own code. Without it, the tab will arm but has no way to receive requests from outside the browser.</p>
+  <p>Firefox communicates with the host over stdin/stdout (Firefox Native Messaging). Your code communicates with the host over TCP  -  or, with the embedded Python host, your script is the host and Firefox launches it directly.</p>
 
   <h2>Choose a host</h2>
   <table>
@@ -194,9 +194,9 @@
       </tr>
       <tr>
         <td>Persistent server</td>
-        <td>Yes — stays running until Firefox exits</td>
-        <td>Yes — stays running until Firefox exits</td>
-        <td>No — script runs once and exits</td>
+        <td>Yes  -  stays running until Firefox exits</td>
+        <td>Yes  -  stays running until Firefox exits</td>
+        <td>No  -  script runs once and exits</td>
       </tr>
       <tr>
         <td>Good for</td>
@@ -211,7 +211,7 @@
   <h2 id="java">Java host</h2>
   <p>A persistent TCP server on <code>localhost:9919</code>. Callers connect from any language. Can run directly with a JDK or via Docker (no JDK needed).</p>
 
-  <h3>Option A — Direct (JDK 21+ required)</h3>
+  <h3>Option A  -  Direct (JDK 21+ required)</h3>
   <div class="steps">
     <div class="step">
       <div class="step-num">1</div>
@@ -226,7 +226,7 @@ javac -d out src/*.java</code></pre>
       <div class="step-num">2</div>
       <div class="step-body">
         <strong>Create a launcher script</strong>
-        <p>Firefox must launch an executable — create <code>~/bin/fetchgate.sh</code>:</p>
+        <p>Firefox must launch an executable  -  create <code>~/bin/fetchgate.sh</code>:</p>
         <pre><code>#!/bin/bash
 exec java -cp "/absolute/path/to/FetchGate/out" Main</code></pre>
         <pre><code>chmod +x ~/bin/fetchgate.sh</code></pre>
@@ -244,7 +244,7 @@ cp fetchgate.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code></pre>
     </div>
   </div>
 
-  <h3>Option B — Docker (no JDK required)</h3>
+  <h3>Option B  -  Docker (no JDK required)</h3>
   <div class="steps">
     <div class="step">
       <div class="step-num">1</div>
@@ -268,7 +268,7 @@ exec docker run --rm -i --network=host fetchgate</code></pre>
     <div class="step">
       <div class="step-num">3</div>
       <div class="step-body">
-        <strong>Register the native host</strong> — same as Option A, step 3 above.
+        <strong>Register the native host</strong>  -  same as Option A, step 3 above.
       </div>
     </div>
   </div>
@@ -276,10 +276,10 @@ exec docker run --rm -i --network=host fetchgate</code></pre>
   <h3>Smoke test</h3>
   <p>Arm a tab, then:</p>
   <pre><code>echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919</code></pre>
-  <p>You should get back one JSON line with <code>status</code>, <code>headers</code>, and <code>body</code>. <code>timeout 3</code> is needed because the Java host keeps connections open — without it, <code>nc</code> hangs waiting for more data after the response.</p>
+  <p>You should get back one JSON line with <code>status</code>, <code>headers</code>, and <code>body</code>. <code>timeout 3</code> is needed because the Java host keeps connections open  -  without it, <code>nc</code> hangs waiting for more data after the response.</p>
 
   <h2 id="python-tcp">Python TCP host</h2>
-  <p>A pure-Python drop-in replacement for the Java host. Same TCP interface on <code>localhost:9919</code> — any caller that works with the Java host works unchanged. No JDK needed.</p>
+  <p>A pure-Python drop-in replacement for the Java host. Same TCP interface on <code>localhost:9919</code>  -  any caller that works with the Java host works unchanged. No JDK needed.</p>
 
   <div class="steps">
     <div class="step">
@@ -308,7 +308,7 @@ cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code>
   <pre><code>echo '{"method":"GET","url":"/robots.txt"}' | nc localhost 9919</code></pre>
 
   <h2 id="python-embedded">Python embedded host</h2>
-  <p>Your Python script IS the native host. Firefox launches it when you arm a tab. No persistent server — the script runs once and exits. Ideal for targeted one-off data extraction jobs.</p>
+  <p>Your Python script IS the native host. Firefox launches it when you arm a tab. No persistent server  -  the script runs once and exits. Ideal for targeted one-off data extraction jobs.</p>
 
   <div class="steps">
     <div class="step">
@@ -331,11 +331,11 @@ from fetchgate import FetchGate, FetchGateError
 
 fg = FetchGate()
 
-# Fetch mode — authenticated HTTP request via the tab
+# Fetch mode  -  authenticated HTTP request via the tab
 resp = fg.fetch({"method": "GET", "url": "/api/data"})
 print(resp["status"], resp["body"])
 
-# JS mode — run arbitrary JavaScript in the tab
+# JS mode  -  run arbitrary JavaScript in the tab
 resp = fg.fetch({"js": "return document.title"})
 print(resp["result"])</code></pre>
         <div class="note"><strong>stdout is redirected.</strong> After <code>FetchGate()</code> is constructed, <code>sys.stdout</code> is redirected to <code>sys.stderr</code> to prevent accidental <code>print()</code> calls from corrupting the NM stream. Use <code>sys.__stdout__</code> to write output you want to capture from outside the browser.</div>
@@ -349,14 +349,14 @@ print(resp["result"])</code></pre>
 cp fetchgate_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code></pre>
         <p>Set <code>path</code> to your script:</p>
         <pre><code>"path": "/home/you/bin/my_scraper.py"</code></pre>
-        <p>The script must be executable (<code>chmod +x</code>) and must have a shebang line (<code>#!/usr/bin/env python3</code>) — Firefox uses the shebang to launch it.</p>
+        <p>The script must be executable (<code>chmod +x</code>) and must have a shebang line (<code>#!/usr/bin/env python3</code>)  -  Firefox uses the shebang to launch it.</p>
       </div>
     </div>
     <div class="step">
       <div class="step-num">4</div>
       <div class="step-body">
         <strong>Run it</strong>
-        <p>Navigate to the target website, then arm the tab (click the toolbar button). Firefox launches your script immediately. The badge turns <strong>ERR</strong> when your script finishes — that is expected (the NM connection closed because the script exited). Click the toolbar button again to re-arm and re-run.</p>
+        <p>Navigate to the target website, then arm the tab (click the toolbar button). Firefox launches your script immediately. The badge turns <strong>ERR</strong> when your script finishes  -  that is expected (the NM connection closed because the script exited). Click the toolbar button again to re-arm and re-run.</p>
       </div>
     </div>
   </div>
@@ -371,7 +371,7 @@ cp fetchgate_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json</code></pr
   <pre><code>// Request from the extension to your host
 {"__fg_id": 1, "req": "{\"method\":\"GET\",\"url\":\"/api/data\"}"}
 
-// Fetch mode reply — echo __fg_id, spread response fields
+// Fetch mode reply  -  echo __fg_id, spread response fields
 {"__fg_id": 1, "status": 200, "statusText": "OK", "headers": {...}, "body": "..."}
 
 // JS mode reply

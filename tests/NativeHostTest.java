@@ -4,7 +4,7 @@ import java.util.Arrays;
 import java.util.concurrent.*;
 
 /**
- * Tests for NativeHost — the TCP↔NativeMessaging bridge.
+ * Tests for NativeHost  -  the TCP↔NativeMessaging bridge.
  *
  * Each test constructs a NativeHost wired to in-process pipes that stand in for
  * Firefox's stdin/stdout, starts it on a random OS-assigned port (port 0), and
@@ -23,7 +23,7 @@ import java.util.concurrent.*;
  */
 public class NativeHostTest {
 
-    /** Timeout used for all hosts under test — short enough to keep the suite fast. */
+    /** Timeout used for all hosts under test  -  short enough to keep the suite fast. */
     private static final int TEST_TIMEOUT_MS = 600;
 
     public static void run() throws Exception {
@@ -72,7 +72,7 @@ public class NativeHostTest {
             pin.close();
         });
 
-        TestRunner.test("stop() is idempotent — calling it twice does not throw", () -> {
+        TestRunner.test("stop() is idempotent  -  calling it twice does not throw", () -> {
             try (Fixture f = new Fixture()) {
                 f.host.stop();
                 f.host.stop();
@@ -115,7 +115,7 @@ public class NativeHostTest {
         });
 
         TestRunner.test("non-2xx response (404) is returned verbatim to caller", () -> {
-            // The host must not filter or alter error responses — the caller decides
+            // The host must not filter or alter error responses  -  the caller decides
             // what to do with a 404, 403, 500 etc.
             try (Fixture f = new Fixture()) {
                 String response = "{\"status\":404,\"statusText\":\"Not Found\","
@@ -168,7 +168,7 @@ public class NativeHostTest {
         });
 
         TestRunner.test("response with JSON-encoded special characters forwarded correctly", () -> {
-            // JSON-encoded \n, \t, unicode — no literal newlines, so readLine() doesn't truncate.
+            // JSON-encoded \n, \t, unicode  -  no literal newlines, so readLine() doesn't truncate.
             try (Fixture f = new Fixture()) {
                 String response = "{\"status\":200,\"body\":\"line1\\nline2\\ttab\\u00e9\"}";
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
@@ -225,7 +225,7 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("stale response is discarded by ID mismatch — next request gets correct response", () -> {
+        TestRunner.test("stale response is discarded by ID mismatch  -  next request gets correct response", () -> {
             // The ID-based fix: the host discards any response whose __fg_id does not
             // match the current request, regardless of timing. The stale reply from a
             // previous timed-out request has the old ID and is rejected even if it
@@ -253,7 +253,7 @@ public class NativeHostTest {
             // Such a message carries no __fg_id, so the host's ID check discards it
             // even if the responseQueue.clear() misses it in a race. Both defences work.
             try (Fixture f = new Fixture()) {
-                // No request in flight — Firefox sends something spontaneously (no __fg_id).
+                // No request in flight  -  Firefox sends something spontaneously (no __fg_id).
                 NativeMessaging.write(f.firefoxResponseWriter, "{\"unsolicited\":true}");
                 Thread.sleep(60); // let stdin-reader enqueue it
 
@@ -301,7 +301,7 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("firefox disconnects during in-flight request — caller receives error quickly, not after full timeout", () -> {
+        TestRunner.test("firefox disconnects during in-flight request  -  caller receives error quickly, not after full timeout", () -> {
             try (Fixture f = new Fixture()) {
                 Future<String> result = f.sendAsCaller("{\"method\":\"GET\",\"url\":\"/\"}");
                 f.readForwardedId(); // consume so the pipe does not stall
@@ -314,7 +314,7 @@ public class NativeHostTest {
 
                 Assert.notNull(reply, "caller must receive a response, not hang indefinitely");
                 Assert.contains(reply, "error");
-                // Sentinel unblocks the poll immediately — should arrive well before the full timeout
+                // Sentinel unblocks the poll immediately  -  should arrive well before the full timeout
                 Assert.isTrue(elapsed < TEST_TIMEOUT_MS / 2,
                         "expected fast error via sentinel, but got delay of " + elapsed + " ms");
             }
@@ -322,7 +322,7 @@ public class NativeHostTest {
 
         // ── Malformed / edge-case input ───────────────────────────────────────
 
-        TestRunner.test("blank request line is ignored — host keeps running", () -> {
+        TestRunner.test("blank request line is ignored  -  host keeps running", () -> {
             try (Fixture f = new Fixture()) {
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
                      PrintWriter    out = new PrintWriter(s.getOutputStream(), true);
@@ -341,7 +341,7 @@ public class NativeHostTest {
 
         TestRunner.test("request with leading/trailing whitespace is trimmed and processed correctly", () -> {
             // injectFgId() requires the JSON to start with '{'. Without stripping,
-            // " {\"url\":\"...\"}" would yield {"__fg_id":1,{"url":"..."}} — malformed JSON
+            // " {\"url\":\"...\"}" would yield {"__fg_id":1,{"url":"..."}}  -  malformed JSON
             // that the extension would fail to parse. After stripping it must work normally.
             try (Fixture f = new Fixture()) {
                 String bare     = "{\"method\":\"GET\",\"url\":\"/trimmed\"}";
@@ -369,7 +369,7 @@ public class NativeHostTest {
                     Assert.notNull(reply, "caller must receive an error response");
                     Assert.contains(reply, "error");
 
-                    // Connection must still be open — a valid follow-up request must work.
+                    // Connection must still be open  -  a valid follow-up request must work.
                     String req      = "{\"method\":\"GET\",\"url\":\"/retry\"}";
                     String expected = "{\"status\":200,\"body\":\"ok\"}";
                     out.println(req);
@@ -380,14 +380,14 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("caller-supplied __fg_id does not break routing — host envelope isolates it", () -> {
+        TestRunner.test("caller-supplied __fg_id does not break routing  -  host envelope isolates it", () -> {
             // The host wraps the caller's JSON as a string in the envelope:
             //   {"__fg_id":N,"req":"{\"__fg_id\":99,...}"}
             // background.js sees only the outer __fg_id (N) for routing, and
             // JSON.parse(msg.req) surfaces the caller's __fg_id:99 only to
             // content_script.js, which ignores unknown fields.
             try (Fixture f = new Fixture()) {
-                // Caller includes their own __fg_id:99 — it ends up inside the req string.
+                // Caller includes their own __fg_id:99  -  it ends up inside the req string.
                 String request  = "{\"__fg_id\":99,\"method\":\"GET\",\"url\":\"/\"}";
                 String response = "{\"status\":200,\"body\":\"ok\"}";
 
@@ -405,7 +405,7 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("whitespace-only request is discarded — host keeps running", () -> {
+        TestRunner.test("whitespace-only request is discarded  -  host keeps running", () -> {
             try (Fixture f = new Fixture()) {
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
                      PrintWriter    out = new PrintWriter(s.getOutputStream(), true);
@@ -422,14 +422,14 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("request with embedded newline — each line validated independently", () -> {
+        TestRunner.test("request with embedded newline  -  each line validated independently", () -> {
             // Callers must send compact single-line JSON. Multi-line JSON is split at
             // newlines; each fragment is validated independently. A fragment that does
             // not end with '}' is rejected with a descriptive error rather than forwarded
             // as malformed JSON.
             try (Fixture f = new Fixture()) {
                 // A caller mistakenly splits a JSON object across two lines.
-                String firstLine  = "{\"method\":\"GET\",";  // incomplete — no closing }
+                String firstLine  = "{\"method\":\"GET\",";  // incomplete  -  no closing }
                 String secondLine = "\"url\":\"/api\"}";      // not a JSON object
 
                 try (Socket s = new Socket("127.0.0.1", f.host.getBoundPort());
@@ -467,7 +467,7 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("caller disconnect before sending — host keeps running", () -> {
+        TestRunner.test("caller disconnect before sending  -  host keeps running", () -> {
             try (Fixture f = new Fixture()) {
                 new Socket("127.0.0.1", f.host.getBoundPort()).close();
                 Thread.sleep(100);
@@ -485,7 +485,7 @@ public class NativeHostTest {
             // caller does not have to wait out the full timeout.
             //
             // We use a CountDownLatch-gated InputStream: it blocks until signaled,
-            // then throws — giving us control over when the 'crash' happens.
+            // then throws  -  giving us control over when the 'crash' happens.
             CountDownLatch crashLatch = new CountDownLatch(1);
             InputStream controlled = new InputStream() {
                 @Override public int read() throws IOException { throw new IOException("unreachable"); }
@@ -505,7 +505,7 @@ public class NativeHostTest {
             for (int i = 0; i < 100 && host.getBoundPort() <= 0; i++) Thread.sleep(20);
 
             try {
-                // Caller sends a request — forwarded to Firefox via hostOut.
+                // Caller sends a request  -  forwarded to Firefox via hostOut.
                 Future<String> result = exec.submit(() -> {
                     try (Socket         s   = new Socket("127.0.0.1", host.getBoundPort());
                          PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
@@ -517,7 +517,7 @@ public class NativeHostTest {
                 // Consume the forwarded request so the caller isn't blocked on the write side.
                 NativeMessaging.read(outReader);
 
-                // Trigger the simulated pipe crash — stdin-reader should offer sentinel.
+                // Trigger the simulated pipe crash  -  stdin-reader should offer sentinel.
                 long start = System.currentTimeMillis();
                 crashLatch.countDown();
 
@@ -535,7 +535,7 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("timeout closes TCP connection — reconnect and retry succeeds", () -> {
+        TestRunner.test("timeout closes TCP connection  -  reconnect and retry succeeds", () -> {
             // After a timeout the host breaks the connection so a stale late reply
             // cannot be consumed by the next request. The caller must reconnect;
             // the reconnected request must be served correctly.
@@ -549,7 +549,7 @@ public class NativeHostTest {
                     f.readForwardedId(); // consume the forwarded request
                     Assert.contains(in.readLine(), "timeout");
 
-                    // Host closed the connection — second readLine must return EOF.
+                    // Host closed the connection  -  second readLine must return EOF.
                     s.setSoTimeout(500);
                     try {
                         Assert.isNull(in.readLine(), "expected EOF after timeout closes connection");
@@ -585,7 +585,7 @@ public class NativeHostTest {
                     // Host should have closed the connection after a write failure.
                     s.setSoTimeout(500);
                     try {
-                        Assert.isNull(in.readLine(), "expected EOF — host must close connection after oversized request");
+                        Assert.isNull(in.readLine(), "expected EOF  -  host must close connection after oversized request");
                     } catch (SocketTimeoutException e) { /* also acceptable */ }
                 }
 
@@ -601,7 +601,7 @@ public class NativeHostTest {
 
         TestRunner.test("caller disconnects mid-wait: host recovers and serves subsequent callers", () -> {
             // If the caller closes the TCP socket while the host is blocked waiting for
-            // Firefox's response, the host must not crash — it must detect the closed
+            // Firefox's response, the host must not crash  -  it must detect the closed
             // socket and resume accepting new connections.
             try (Fixture f = new Fixture()) {
                 // Caller connects and sends a request.
@@ -617,7 +617,7 @@ public class NativeHostTest {
                 // Caller disconnects abruptly while host is blocked in poll().
                 s.close();
 
-                // Firefox now responds — host's println will fail silently (PrintWriter
+                // Firefox now responds  -  host's println will fail silently (PrintWriter
                 // swallows the broken-pipe error), then in.readLine() returns null → loop exits.
                 NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200}", id));
                 Thread.sleep(150); // let handleCaller finish and accept() resume
@@ -659,7 +659,7 @@ public class NativeHostTest {
                 int staleId = f.readForwardedId(); // capture ID of the timed-out request
                 Assert.contains(result1.get(TEST_TIMEOUT_MS + 500, TimeUnit.MILLISECONDS), "timeout");
 
-                // Firefox delivers a late reply tagged with the STALE ID — must be discarded.
+                // Firefox delivers a late reply tagged with the STALE ID  -  must be discarded.
                 NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200,\"body\":\"STALE\"}", staleId));
 
                 // Next request must receive its own correctly-tagged response, never the stale one.
@@ -671,7 +671,7 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("persistent caller: Firefox dies between requests — second request gets fast error", () -> {
+        TestRunner.test("persistent caller: Firefox dies between requests  -  second request gets fast error", () -> {
             // Regression for the sentinel-clearing race: responseQueue.clear() at the
             // start of each request would consume the SHUTDOWN_SENTINEL before the poll
             // loop could find it. The firefoxAlive flag now short-circuits this path so
@@ -681,7 +681,7 @@ public class NativeHostTest {
                      PrintWriter    out = new PrintWriter(new OutputStreamWriter(s.getOutputStream(), "UTF-8"), true);
                      BufferedReader in  = new BufferedReader(new InputStreamReader(s.getInputStream(), "UTF-8"))) {
 
-                    // First request completes normally — proves the connection works.
+                    // First request completes normally  -  proves the connection works.
                     out.println("{\"method\":\"GET\",\"url\":\"/first\"}");
                     int id1 = f.readForwardedId();
                     NativeMessaging.write(f.firefoxResponseWriter, Fixture.tagged("{\"status\":200}", id1));
@@ -699,7 +699,7 @@ public class NativeHostTest {
 
                     Assert.notNull(reply, "caller must receive an error, not hang");
                     Assert.contains(reply, "error");
-                    // Must not wait for the full timeout — firefoxAlive flag should trigger immediately.
+                    // Must not wait for the full timeout  -  firefoxAlive flag should trigger immediately.
                     Assert.isTrue(elapsed < TEST_TIMEOUT_MS / 2,
                             "expected fast error after Firefox EOF, but waited " + elapsed + " ms");
                 }
@@ -775,7 +775,7 @@ public class NativeHostTest {
             }
         });
 
-        TestRunner.test("firefox EOF closes the TCP server — no new connections accepted", () -> {
+        TestRunner.test("firefox EOF closes the TCP server  -  no new connections accepted", () -> {
             // When the Native Messaging pipe reaches EOF, stdin-reader calls stop().
             // The TCP server socket must close, refusing further connections.
             try (Fixture f = new Fixture()) {
@@ -791,7 +791,7 @@ public class NativeHostTest {
                     new Socket("127.0.0.1", port).close();
                     throw new AssertionError("expected connection refused after Firefox EOF");
                 } catch (ConnectException e) {
-                    // expected — server socket was closed by stop()
+                    // expected  -  server socket was closed by stop()
                 }
             }
         });

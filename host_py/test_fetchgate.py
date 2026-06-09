@@ -4,7 +4,7 @@
 Run from the project root:
     python3 host_py/test_fetchgate.py
 
-No external dependencies — standard library only.
+No external dependencies  -  standard library only.
 """
 
 import io
@@ -199,7 +199,7 @@ class TestFetch(unittest.TestCase):
         env = read_sent(out)
         self.assertIn("__fg_id", env)
         self.assertEqual(env["__fg_id"], 1)
-        # __fg_id must be first — check raw JSON starts with it
+        # __fg_id must be first  -  check raw JSON starts with it
         out.seek(0)
         raw_json = out.read()[4:].decode("utf-8")
         self.assertTrue(raw_json.startswith('{"__fg_id":'))
@@ -256,7 +256,7 @@ class TestFetch(unittest.TestCase):
         self.assertEqual(resp, {"error": "no tab is armed"})
 
     def test_raises_fetchgate_error_on_eof_before_reply(self):
-        fg, _ = make_fg()  # no responses — EOF immediately
+        fg, _ = make_fg()  # no responses  -  EOF immediately
         with self.assertRaises(FetchGateError):
             fg.fetch({"url": "/"})
 
@@ -271,7 +271,7 @@ class TestFetch(unittest.TestCase):
 
     def test_fetch_raises_fetchgate_size_error_for_oversized_request(self):
         # fetch() must propagate FetchGateSizeError when the serialised envelope
-        # exceeds 1 MB — the NM connection stays alive, so the caller can retry.
+        # exceeds 1 MB  -  the NM connection stays alive, so the caller can retry.
         fg, _ = make_fg()
         with self.assertRaises(FetchGateSizeError):
             fg.fetch({"body": "x" * (1024 * 1024 + 1)})

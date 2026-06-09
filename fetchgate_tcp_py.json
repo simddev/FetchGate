@@ -1,6 +1,6 @@
 {
   "name": "fetchgate",
-  "description": "FetchGate Python TCP host — bridges TCP clients to the browser tab via Native Messaging.",
+  "description": "FetchGate Python TCP host  -  bridges TCP clients to the browser tab via Native Messaging.",
   "path": "/REPLACE/WITH/ABSOLUTE/PATH/TO/host_py/fetchgate_tcp_host.py",
   "type": "stdio",
   "allowed_extensions": ["fetchgate@localhost"]

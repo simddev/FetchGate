@@ -17,7 +17,7 @@ async function init() {
 
     await renderStatus();
 
-    // Refresh status while the popup is open — catches arm/disarm via keyboard shortcut.
+    // Refresh status while the popup is open  -  catches arm/disarm via keyboard shortcut.
     setInterval(renderStatus, 750);
 
     // Open the host setup page when the user clicks any ? badge in the status detail.
@@ -54,7 +54,7 @@ async function renderStatus() {
         });
 
     } else if (onThisTab && portConnected) {
-        // ── Armed — this tab, host OK ─────────────────────────────
+        // ── Armed  -  this tab, host OK ─────────────────────────────
         setDot('armed');
         statusLabel.textContent = 'Armed';
         statusDetail.innerHTML  = domain(armedTab) + '<br>Host: connected <span class="host-help">?</span>';
@@ -64,9 +64,9 @@ async function renderStatus() {
         });
 
     } else if (onThisTab && !portConnected) {
-        // ── Armed — this tab, host disconnected ──────────────────
+        // ── Armed  -  this tab, host disconnected ──────────────────
         setDot('error');
-        statusLabel.textContent = 'Armed — host disconnected';
+        statusLabel.textContent = 'Armed  -  host disconnected';
         statusDetail.innerHTML  = domain(armedTab) +
             '<br>Host: not running <span class="host-help">?</span>' +
             '<br><span style="color:#555;font-size:11px">Press ? for setup instructions.</span>';
@@ -76,7 +76,7 @@ async function renderStatus() {
         });
 
     } else if (onOtherTab) {
-        // ── Armed — different tab ─────────────────────────────────
+        // ── Armed  -  different tab ─────────────────────────────────
         setDot(portConnected ? 'armed' : 'error');
         statusLabel.textContent = 'Armed (other tab)';
         statusDetail.innerHTML  = domain(armedTab) +
@@ -131,7 +131,7 @@ function startRecording() {
         if (!shortcut)                      { recordingError('Key not supported'); return; }
         if (FIREFOX_RESERVED.has(shortcut)) { recordingError('Unavailable shortcut'); return; }
 
-        // Pause input during async API call — keep recording=true so a concurrent
+        // Pause input during async API call  -  keep recording=true so a concurrent
         // startRecording() call is still blocked, but remove the listener so
         // keypresses during the API round-trip don't queue up.
         document.removeEventListener('keydown', onKey, true);
@@ -173,14 +173,14 @@ function startRecording() {
         document.removeEventListener('keydown', onKey, true);
     }
 
-    // No blur listener — browser action popups close on outside click (listeners
+    // No blur listener  -  browser action popups close on outside click (listeners
     // are GC'd automatically). A blur listener would cancel recording on every
     // desktop notification, making the feature unusable.
     document.addEventListener('keydown', onKey, true);
 }
 
 // First-pass filter for universally certain Firefox shortcuts.
-// Kept intentionally small — Ctrl+Shift combos were removed because Firefox
+// Kept intentionally small  -  Ctrl+Shift combos were removed because Firefox
 // version differences caused too many false positives. Runtime verification
 // (startShortcutVerification in background.js) catches everything else reliably.
 const FIREFOX_RESERVED = new Set([
@@ -229,13 +229,13 @@ function eventToShortcut(e) {
 }
 
 function domain(tab) {
-    if (!tab) return '—';
+    if (!tab) return ' - ';
     try {
         // Hostname is always HTML-safe (alphanumeric, dots, hyphens).
         // tab.title is user-controlled and must be escaped before innerHTML use.
-        return new URL(tab.url).hostname || escHtml(tab.title) || '—';
+        return new URL(tab.url).hostname || escHtml(tab.title) || ' - ';
     } catch (_) {
-        return escHtml(tab.title) || '—';
+        return escHtml(tab.title) || ' - ';
     }
 }
 

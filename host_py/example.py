@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Example FetchGate Python script.
 
-This script IS the native host — Firefox launches it when you arm a tab.
+This script IS the native host  -  Firefox launches it when you arm a tab.
 
 Setup
 -----
@@ -51,7 +51,7 @@ try:
 
     # ── JS mode: execute arbitrary JavaScript in the tab ─────────────────────
     # Use this to access APIs, read the DOM, or run any async code.
-    # The code runs as an async function body — use return and await freely.
+    # The code runs as an async function body  -  use return and await freely.
     js_resp = fg.fetch({"js": """
         const r = await fetch('/robots.txt');
         const text = await r.text();

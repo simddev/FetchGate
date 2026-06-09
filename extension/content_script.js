@@ -25,7 +25,7 @@
             // page-level JavaScript variables set by the site's own scripts.
             //
             // fetch() in a content script sandbox does not resolve relative URLs
-            // automatically — the same limitation as in executeFetch (see comment
+            // automatically  -  the same limitation as in executeFetch (see comment
             // there). Provide a wrapped fetch as a named parameter so that user code
             // calling `fetch('/')` gets proper relative-URL resolution without needing
             // to supply absolute URLs.
@@ -77,7 +77,7 @@
 
             // Resolve relative URLs against the current page origin.
             // Firefox's fetch() in a content script context does not do this
-            // automatically — passing "/" directly throws "/ is not a valid URL."
+            // automatically  -  passing "/" directly throws "/ is not a valid URL."
             const url = new URL(spec.url, location.href).href;
             const response = await fetch(url, init);
 
@@ -98,8 +98,8 @@
             // Firefox's Native Messaging protocol caps messages at 1 MB. A reply
             // that is too large would cause Firefox to silently close the port when
             // background.js tries to postMessage it to the native host. Reject early
-            // with a clear error instead. Measure the full serialised reply — not
-            // just the body — because headers, status fields, and JSON escaping of
+            // with a clear error instead. Measure the full serialised reply  -  not
+            // just the body  -  because headers, status fields, and JSON escaping of
             // quote/backslash-heavy bodies all contribute to the final wire size.
             // TextEncoder gives true UTF-8 byte count; string .length undercounts
             // multi-byte characters (e.g. one CJK char = 3 UTF-8 bytes).

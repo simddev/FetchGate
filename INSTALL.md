@@ -1,4 +1,4 @@
-# FetchGate — Installation
+# FetchGate  -  Installation
 
 ## Install the extension
 
@@ -13,7 +13,7 @@ from the Releases page, then install it using either method:
   **Install Add-on From File**, and select the `.xpi`.
 
 Pin the FetchGate icon to the toolbar via the extensions (puzzle-piece) menu.
-The extension is Mozilla-signed and persists across browser restarts — no
+The extension is Mozilla-signed and persists across browser restarts  -  no
 `about:config` changes needed, no re-loading after restarts.
 
 > **Developers:** to load without installing, go to
@@ -24,14 +24,14 @@ The extension is Mozilla-signed and persists across browser restarts — no
 
 ## Choose your host
 
-FetchGate also requires a *native host* — a process that Firefox launches to
+FetchGate also requires a *native host*  -  a process that Firefox launches to
 bridge the extension and your code. Pick one based on how you want to call it:
 
 | | Java host | Python TCP host | Python embedded host |
 |---|---|---|---|
 | Requires | JDK 21+, **or Docker** | Python 3.6+ | Python 3.6+ |
 | How your code calls it | Connect to `localhost:9919` from any language | Connect to `localhost:9919` from any language | Your Python script IS the host; Firefox launches it |
-| Persistent server | Yes — stays running until Firefox exits | Yes — stays running until Firefox exits | No — script runs once and exits |
+| Persistent server | Yes  -  stays running until Firefox exits | Yes  -  stays running until Firefox exits | No  -  script runs once and exits |
 | Good for | Multi-script workflows, any language, interactive use | Same as Java host, when Java is not available | A single Python script with a specific job |
 
 **Only one host can be active at a time.** All three install their configuration
@@ -48,7 +48,7 @@ You can run the Java host either directly (requires JDK 21+) or via Docker
 
 ---
 
-### Option A — Run directly (JDK required)
+### Option A  -  Run directly (JDK required)
 
 #### 1. Compile
 
@@ -62,7 +62,7 @@ Class files land in `out/`. Requires JDK 21+.
 
 #### 2. Create the launcher script
 
-Firefox cannot invoke `.class` files directly — the native messaging manifest
+Firefox cannot invoke `.class` files directly  -  the native messaging manifest
 must point to an executable. Create a small shell wrapper (anywhere permanent,
 e.g. `~/bin/fetchgate.sh`):
 
@@ -83,7 +83,7 @@ process is left behind.
 
 ---
 
-### Option B — Run via Docker (no JDK required)
+### Option B  -  Run via Docker (no JDK required)
 
 Docker handles compilation and the Java runtime. The container shares the
 host's network stack (`--network=host`) so the TCP server on `localhost:9919`
@@ -143,7 +143,7 @@ placeholder `path` value with the absolute path to your launcher script:
 "path": "/home/you/bin/fetchgate.sh"
 ```
 
-Do not change the `"name"` field — it must stay `"fetchgate"` to match what
+Do not change the `"name"` field  -  it must stay `"fetchgate"` to match what
 the extension asks for.
 
 ### 4. Smoke test
@@ -153,7 +153,7 @@ above),
 then:
 
 1. Open any website you are logged into
-2. Click the **FetchGate** toolbar button — the badge turns green **ON**
+2. Click the **FetchGate** toolbar button  -  the badge turns green **ON**
 3. In a terminal:
 
 ```bash
@@ -162,8 +162,8 @@ echo '{"method":"GET","url":"/robots.txt"}' | timeout 3 nc localhost 9919
 
 You should get back a single JSON line with `status`, `headers`, and `body`.
 `timeout 3` is needed because the host keeps connections open for persistent
-callers — without it, `nc` hangs waiting for more data after the response.
-`/robots.txt` is a safe first test — it is always small. Avoid using `"url":"/"`
+callers  -  without it, `nc` hangs waiting for more data after the response.
+`/robots.txt` is a safe first test  -  it is always small. Avoid using `"url":"/"`
 as the initial test: many homepages exceed the 1 MB Native Messaging size limit
 and will return an error even on a perfectly healthy setup.
 
@@ -174,14 +174,14 @@ and will return an error even on a perfectly healthy setup.
 A pure-Python drop-in replacement for the Java host. Firefox launches it as
 the native host; it then opens `localhost:9919` and proxies between TCP callers
 and the browser tab. Any tool that works with the Java host works unchanged.
-Requires Python 3.6+ only — no Java needed.
+Requires Python 3.6+ only  -  no Java needed.
 
 ### 1. Get the files
 
 Clone or download the FetchGate repository. You need two files from it:
 
-- `host_py/fetchgate_tcp_host.py` — the Python script Firefox will launch as the host
-- `fetchgate_tcp_py.json` — a manifest template that tells Firefox where to find it
+- `host_py/fetchgate_tcp_host.py`  -  the Python script Firefox will launch as the host
+- `fetchgate_tcp_py.json`  -  a manifest template that tells Firefox where to find it
 
 Place `fetchgate_tcp_host.py` somewhere permanent on your machine, for example:
 
@@ -204,7 +204,7 @@ Create the directory if it does not exist:
 mkdir -p ~/.mozilla/native-messaging-hosts
 ```
 
-Copy the template and rename it — the browser only looks for the exact filename `fetchgate.json`:
+Copy the template and rename it  -  the browser only looks for the exact filename `fetchgate.json`:
 
 ```bash
 cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
@@ -217,7 +217,7 @@ You will see a line like:
 "path": "/REPLACE/WITH/ABSOLUTE/PATH/TO/host_py/fetchgate_tcp_host.py"
 ```
 
-Replace that placeholder with the full path to `fetchgate_tcp_host.py` — the
+Replace that placeholder with the full path to `fetchgate_tcp_host.py`  -  the
 file you placed in step 1. For example:
 
 ```json
@@ -225,10 +225,10 @@ file you placed in step 1. For example:
 ```
 
 This is the only line you need to change. Do not rename or move `fetchgate.json`
-itself — it must stay at `~/.mozilla/native-messaging-hosts/fetchgate.json`.
+itself  -  it must stay at `~/.mozilla/native-messaging-hosts/fetchgate.json`.
 
 Firefox reads this manifest when you arm a tab and launches the script
-automatically — you never need to start it manually.
+automatically  -  you never need to start it manually.
 
 ### 3. Smoke test
 
@@ -236,7 +236,7 @@ Ensure the extension is installed (see [Install the extension](#install-the-exte
 above), then:
 
 1. Open any website you are logged into
-2. Click the **FetchGate** toolbar button — the badge turns green **ON**
+2. Click the **FetchGate** toolbar button  -  the badge turns green **ON**
 3. In a terminal:
 
 ```bash
@@ -274,11 +274,11 @@ Everything after `fg = FetchGate()` is your code. Use `fg.fetch(spec)` to
 send requests and get responses. Two modes are available:
 
 ```python
-# Fetch mode — run an authenticated HTTP request and get the response
+# Fetch mode  -  run an authenticated HTTP request and get the response
 resp = fg.fetch({"method": "GET", "url": "/api/data"})
 print(resp["status"], resp["body"])
 
-# JS mode — run arbitrary JavaScript in the tab and get the return value
+# JS mode  -  run arbitrary JavaScript in the tab and get the return value
 resp = fg.fetch({"js": "return document.title"})
 print(resp["result"])
 ```
@@ -308,7 +308,7 @@ placeholder `path` with the absolute path to your script:
 ```
 
 The script must be executable (`chmod +x`) and must have a shebang line
-(`#!/usr/bin/env python3`) — Firefox uses the shebang to launch it.
+(`#!/usr/bin/env python3`)  -  Firefox uses the shebang to launch it.
 
 ### 3. Run it
 
@@ -317,7 +317,7 @@ The script must be executable (`chmod +x`) and must have a shebang line
 
 Firefox launches your script immediately when the tab is armed. The badge turns
 green **ON** while the script runs, then **ERR** when it exits. The ERR badge
-after the script exits is expected — it means the Native Messaging connection
+after the script exits is expected  -  it means the Native Messaging connection
 closed because your script finished.
 
 Click the toolbar button again to re-arm and re-run the script.
@@ -342,7 +342,7 @@ You should see messages like:
 ```
 
 If you see an error like `"Could not establish connection to native host"`,
-the native messaging manifest is probably wrong — check that:
+the native messaging manifest is probably wrong  -  check that:
 - `~/.mozilla/native-messaging-hosts/fetchgate.json` exists
 - The `"path"` in that file is an absolute path to an executable file
 - The executable has `chmod +x` and (for Python scripts) a `#!/usr/bin/env python3` shebang
@@ -375,7 +375,7 @@ button twice.
 
 **Switching between hosts:**
 
-Only one host can be active at a time — all three use the filename
+Only one host can be active at a time  -  all three use the filename
 `~/.mozilla/native-messaging-hosts/fetchgate.json`. To switch:
 
 ```bash

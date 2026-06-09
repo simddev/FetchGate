@@ -4,7 +4,7 @@ import java.nio.ByteOrder;
 import java.util.Arrays;
 
 /**
- * Tests for NativeMessaging — the Firefox Native Messaging framing protocol.
+ * Tests for NativeMessaging  -  the Firefox Native Messaging framing protocol.
  *
  * The protocol is: [4-byte little-endian length][UTF-8 JSON payload].
  * These tests cover correctness of framing, byte order, encoding, and edge cases.
@@ -129,7 +129,7 @@ public class NativeMessagingTest {
         TestRunner.test("read: length header exceeding 1 MB cap returns null, does not allocate", () -> {
             // A length in the range (MAX_MESSAGE_BYTES, Integer.MAX_VALUE] is positive in Java
             // but violates Firefox's 1 MB hard cap. Without this guard, readNBytes() would
-            // attempt to allocate and block on hundreds of MB — potentially causing OOM.
+            // attempt to allocate and block on hundreds of MB  -  potentially causing OOM.
             // 1_048_577 = MAX_MESSAGE_BYTES + 1, little-endian: 0x01 0x00 0x10 0x00
             ByteArrayOutputStream buf = new ByteArrayOutputStream();
             buf.write(new byte[]{0x01, 0x00, 0x10, 0x00}); // 1_048_577 in little-endian
