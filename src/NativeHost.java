@@ -11,17 +11,17 @@ import java.util.regex.Pattern;
  *
  * Two interfaces:
  *
- *   1. Firefox   -  System.in / System.out, framed with NativeMessaging protocol
- *   2. Caller    -  TCP server on localhost:PORT, newline-delimited JSON
+ *   1. Firefox  - System.in / System.out, framed with NativeMessaging protocol
+ *   2. Caller   - TCP server on localhost:PORT, newline-delimited JSON
  *
  * Threading model:
  *
- *   Main thread       -  accepts TCP connections; handles them one at a time.
+ *   Main thread      - accepts TCP connections; handles them one at a time.
  *                      Sequential handling is intentional: only one request is
  *                      in flight to Firefox at any given time. Per-request IDs
  *                      (envelope __fg_id) guard against stale late replies.
  *
- *   stdin-reader      -  daemon thread; reads NM frames from Firefox continuously
+ *   stdin-reader     - daemon thread; reads NM frames from Firefox continuously
  *                      and drops them onto responseQueue.
  *
  * Request lifecycle:
@@ -59,12 +59,12 @@ public class NativeHost {
     private volatile int          boundPort    = -1;
     private volatile ServerSocket serverSocket;
 
-    /** Production constructor  -  uses the fixed port and timeout. */
+    /** Production constructor - uses the fixed port and timeout. */
     public NativeHost(InputStream nativeIn, OutputStream nativeOut) {
         this(nativeIn, nativeOut, DEFAULT_PORT, DEFAULT_TIMEOUT);
     }
 
-    /** Test constructor  -  accepts an arbitrary port (0 = OS-assigned) and timeout. */
+    /** Test constructor - accepts an arbitrary port (0 = OS-assigned) and timeout. */
     NativeHost(InputStream nativeIn, OutputStream nativeOut, int port, int timeoutMs) {
         this.nativeIn  = nativeIn;
         this.nativeOut = nativeOut;
@@ -124,7 +124,7 @@ public class NativeHost {
                 while (true) {
                     String msg = NativeMessaging.read(nativeIn);
                     if (msg == null) {
-                        log("Native Messaging connection closed by Firefox  -  shutting down.");
+                        log("Native Messaging connection closed by Firefox - shutting down.");
                         firefoxAlive = false;
                         responseQueue.offer(SHUTDOWN_SENTINEL); // unblock any waiting caller immediately
                         stop(); // closes the server socket, breaking the accept() loop
@@ -161,7 +161,7 @@ public class NativeHost {
             while ((request = in.readLine()) != null) {
                 // Normalise: strip leading/trailing whitespace before any further handling.
                 // buildEnvelope() assumes the JSON starts with '{'; without this strip a request
-                // like " {...}" would produce {"__fg_id":N,{...}}  -  malformed JSON.
+                // like " {...}" would produce {"__fg_id":N,{...}} - malformed JSON.
                 request = request.strip();
                 if (request.isBlank()) continue;
 
@@ -181,7 +181,7 @@ public class NativeHost {
                 // clear (which would consume the SHUTDOWN_SENTINEL) and return
                 // an error immediately instead of waiting for the full timeout.
                 if (!firefoxAlive) {
-                    log("Firefox already disconnected  -  returning error to caller");
+                    log("Firefox already disconnected - returning error to caller");
                     out.println("{\"error\":\"connection to Firefox was closed\"}");
                     break;
                 }
@@ -236,7 +236,7 @@ public class NativeHost {
                     break;
                 } else if (SHUTDOWN_SENTINEL.equals(response)) {
                     response = "{\"error\":\"connection to Firefox was closed\"}";
-                    log("Firefox disconnected  -  returning error to caller");
+                    log("Firefox disconnected - returning error to caller");
                     out.println(response);
                     break;
                 }

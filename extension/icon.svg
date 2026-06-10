@@ -1,20 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
   <title>FetchGate</title>
 
-  <!-- Orange arrow shaft  -  drawn first so the left gate post overlays it,
+  <!-- Orange arrow shaft - drawn first so the left gate post overlays it,
        giving the impression the arrow is entering from the left. -->
   <rect x="0" y="20" width="38" height="8" rx="1" fill="#EA580C"/>
 
   <!-- Blue gate: posts 11px wide, crossbeam 11px tall, gap 9px.
-       Left post x=5–16, right post x=25–36, gap x=16–25. -->
+       Left post x=5 - 16, right post x=25 - 36, gap x=16 - 25. -->
   <rect x="5"  y="5" width="11" height="38" rx="2" fill="#2563EB"/>
   <rect x="25" y="5" width="11" height="38" rx="2" fill="#2563EB"/>
   <rect x="5"  y="5" width="31" height="11" rx="2" fill="#2563EB"/>
 
-  <!-- Right portion of shaft  -  drawn after the gate so it overlaps the right
+  <!-- Right portion of shaft - drawn after the gate so it overlaps the right
        post. Starts 2px before the right post (x=25) to cover anti-aliasing. -->
   <rect x="23" y="20" width="15" height="8" fill="#EA580C"/>
 
-  <!-- Arrowhead  -  base aligned to right post's right edge (x=36). -->
+  <!-- Arrowhead - base aligned to right post's right edge (x=36). -->
   <polygon points="36,13 48,24 36,35" fill="#EA580C"/>
 </svg>

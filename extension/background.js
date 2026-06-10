@@ -20,7 +20,7 @@ let port = null;
 let lastDisarmReason  = null;
 let lastDisarmedTabId = null;
 
-// The last tab the user was on  -  updated by onActivated so the popup can
+// The last tab the user was on - updated by onActivated so the popup can
 // find it even when opening a popup shifts the "current window" context.
 let lastActiveTabId = null;
 browser.tabs.query({ active: true, currentWindow: true }).then(([t]) => { if (t) lastActiveTabId = t.id; });
@@ -62,7 +62,7 @@ function connect() {
     const confirmTimer = setTimeout(() => {
         hostConfirmed = true;
         if (armedTabId !== null && armedTabId === armedTabAtConnect) {
-            notify('FetchGate Armed', 'Tab is ready  -  requests will be routed through this tab.');
+            notify('FetchGate Armed', 'Tab is ready - requests will be routed through this tab.');
         }
     }, 400);
 
@@ -75,10 +75,10 @@ function connect() {
             browser.browserAction.setBadgeText({ text: 'ERR', tabId: armedTabId });
             browser.browserAction.setBadgeBackgroundColor({ color: '#cc0000', tabId: armedTabId });
             if (!hostConfirmed) {
-                notify('FetchGate  -  Host Not Found',
+                notify('FetchGate - Host Not Found',
                        'The native host could not be started. Open the popup and press ? for setup instructions.');
             } else {
-                notify('FetchGate  -  Native Host Disconnected',
+                notify('FetchGate - Native Host Disconnected',
                        'The host process has stopped. Click the toolbar button to reconnect.');
             }
         }
@@ -103,7 +103,7 @@ async function onRequestFromHost(msg) {
 
     function reply(r) {
         if (replyPort) replyPort.postMessage(r);
-        else console.error('[FetchGate] Cannot reply  -  originating port disconnected.');
+        else console.error('[FetchGate] Cannot reply - originating port disconnected.');
     }
 
     let request;
@@ -152,8 +152,8 @@ async function arm(tabId) {
         // "Armed" followed immediately by "disconnected".
         connect();
     } else {
-        // Port already alive  -  host is confirmed running, notify immediately.
-        notify('FetchGate Armed', 'Tab is ready  -  requests will be routed through this tab.');
+        // Port already alive - host is confirmed running, notify immediately.
+        notify('FetchGate Armed', 'Tab is ready - requests will be routed through this tab.');
     }
 
     console.log('[FetchGate] Tab armed:', tabId);
@@ -169,14 +169,14 @@ function disarm(tabId, reason) {
     console.log('[FetchGate] Tab disarmed:', tabId);
 }
 
-// Called by popup.js  -  let variables are not properties of window,
+// Called by popup.js - let variables are not properties of window,
 // so bg.armedTabId / bg.port would return undefined.
 function getState() {
     return { armedTabId, portConnected: !!port, lastDisarmReason, lastDisarmedTabId };
 }
 
 // Returns the tab the user was on when they opened the popup.
-// popup.js cannot query this itself  -  opening the popup shifts the
+// popup.js cannot query this itself - opening the popup shifts the
 // "current window" context so any query there returns the popup window (no tabs).
 async function getActiveTab() {
     if (lastActiveTabId !== null) {
@@ -193,18 +193,18 @@ async function getActiveTab() {
 // After popup.js sets a new shortcut it calls startShortcutVerification().
 // The next onCommand fire within 10 s is treated as the confirmation press rather
 // than an arm/disarm, so we know Firefox and the OS are actually passing the key
-// through to the extension  -  something the commands API can't tell us directly.
+// through to the extension - something the commands API can't tell us directly.
 let shortcutVerifyState = null;
 
 function startShortcutVerification(shortcut) {
     if (shortcutVerifyState) clearTimeout(shortcutVerifyState.timeoutId);
     const timeoutId = setTimeout(() => {
         shortcutVerifyState = null;
-        notify('FetchGate  -  Shortcut Warning',
+        notify('FetchGate - Shortcut Warning',
                `"${shortcut}" didn't respond. It likely conflicts with Firefox or your OS. Open FetchGate to try another.`);
     }, 10000);
     shortcutVerifyState = { shortcut, timeoutId };
-    notify('FetchGate  -  Shortcut Set', `Press ${shortcut} now to verify it works.`);
+    notify('FetchGate - Shortcut Set', `Press ${shortcut} now to verify it works.`);
 }
 
 browser.commands.onCommand.addListener((command) => {
@@ -214,7 +214,7 @@ browser.commands.onCommand.addListener((command) => {
         const { shortcut, timeoutId } = shortcutVerifyState;
         clearTimeout(timeoutId);
         shortcutVerifyState = null;
-        notify('FetchGate  -  Shortcut Confirmed', `${shortcut} is working correctly.`);
+        notify('FetchGate - Shortcut Confirmed', `${shortcut} is working correctly.`);
         return;
     }
 
@@ -252,7 +252,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
                    // Guard: the user may have disarmed (or armed a different tab) while
                    // executeScript was awaiting. Only act if this tab is still armed.
                    if (tabId !== armedTabId) return;
-                   // Re-apply the badge  -  Firefox resets per-tab badge text on navigation.
+                   // Re-apply the badge - Firefox resets per-tab badge text on navigation.
                    browser.browserAction.setBadgeText({ text: 'ON', tabId });
                    browser.browserAction.setBadgeBackgroundColor({ color: '#00aa00', tabId });
                })
@@ -262,7 +262,7 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
                    // Without this check, a stale catch() could call disarm() and clear
                    // armedTabId even though a different tab was already armed successfully.
                    if (tabId === armedTabId) {
-                       disarm(tabId, 'The tab navigated to a restricted page  -  re-arm to continue.');
+                       disarm(tabId, 'The tab navigated to a restricted page - re-arm to continue.');
                    }
                });
     }

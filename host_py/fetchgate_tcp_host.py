@@ -23,24 +23,24 @@ Setup
 2. Edit fetchgate_tcp_py.json (project root): set "path" to the absolute path
    of this file.
 
-3. Install the manifest  -  mutually exclusive with fetchgate.json (Java) and
+3. Install the manifest - mutually exclusive with fetchgate.json (Java) and
    fetchgate_py.json (embedded Python):
        cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
 
-4. Arm a tab in Firefox  -  click the toolbar button. Firefox launches this
+4. Arm a tab in Firefox - click the toolbar button. Firefox launches this
    script, which prints "Listening on localhost:9919" to stderr (visible in
    the Firefox Browser Console) and waits for TCP connections.
 
 Notes
 -----
-- Only one NM request is in flight at a time  -  NM is serial by design.
+- Only one NM request is in flight at a time - NM is serial by design.
   Concurrent TCP clients are accepted and handled in threads; each waits for
   the lock before forwarding to the browser.
 - When Firefox closes the NM connection, the next fg.fetch() call raises
-  FetchGateError and nm_dead is set  -  subsequent TCP clients receive an error.
+  FetchGateError and nm_dead is set - subsequent TCP clients receive an error.
   If no client is connected at that moment, the process continues running
   until killed (e.g. when Firefox itself exits and the OS reclaims the process).
-- Do not write to sys.stdout after constructing FetchGate()  -  it is redirected
+- Do not write to sys.stdout after constructing FetchGate() - it is redirected
   to sys.stderr to protect the NM binary stream. All print() calls here go to
   stderr, which is what the Firefox Browser Console shows.
 - No request timeout. If a request hangs, the TCP client can impose its own
@@ -66,7 +66,7 @@ MAX_RECV_BYTES = 1_048_576  # reject before calling fg.fetch() to avoid false nm
 def _send(conn: socket.socket, obj: dict) -> None:
     """Write a JSON object as a newline-terminated frame to the TCP socket.
 
-    Silently ignores OSError  -  the client may have disconnected before the
+    Silently ignores OSError - the client may have disconnected before the
     response arrived, and there is nothing useful to do in that case.
     """
     try:
@@ -84,12 +84,12 @@ def handle_client(
     """Serve one TCP connection: read a JSON request, proxy it via NM, reply.
 
     Called in a daemon thread per connection. The lock serialises access to the
-    NM channel  -  only one fetch() runs at a time. nm_dead is set permanently
+    NM channel - only one fetch() runs at a time. nm_dead is set permanently
     once the NM connection to Firefox is lost so subsequent requests fail fast
     without attempting a broken fetch().
     """
     try:
-        # Read bytes until a newline arrives  -  same framing the Java host uses.
+        # Read bytes until a newline arrives - same framing the Java host uses.
         # bytearray.extend() is O(chunk) rather than O(total), and find() stops
         # at the first newline so a pipelined second request is not consumed.
         buf = bytearray()
@@ -120,11 +120,11 @@ def handle_client(
             try:
                 resp = fg.fetch(req)
             except FetchGateSizeError as exc:
-                # Request too large for NM  -  connection is alive, do NOT set nm_dead.
+                # Request too large for NM - connection is alive, do NOT set nm_dead.
                 _send(conn, {"error": str(exc)})
                 return
             except FetchGateError as exc:
-                # NM pipe is broken  -  mark it so future clients fail fast.
+                # NM pipe is broken - mark it so future clients fail fast.
                 nm_dead.set()
                 _send(conn, {"error": str(exc)})
                 return
@@ -170,5 +170,5 @@ def serve(fg: FetchGate) -> None:
 if __name__ == "__main__":
     fg = FetchGate()
     # FetchGate() redirects sys.stdout → sys.stderr. All print() calls below
-    # this point go to stderr  -  the Firefox Browser Console shows them.
+    # this point go to stderr - the Firefox Browser Console shows them.
     serve(fg)

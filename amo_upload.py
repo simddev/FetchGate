@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AMO upload script  -  submits extension, updates description, uploads screenshots.
+AMO upload script - submits extension, updates description, uploads screenshots.
 
 Usage:
     export AMO_KEY=user:xxxxx:nnn
@@ -33,7 +33,7 @@ DOCS_DIR   = os.path.join(SCRIPT_DIR, 'docs')
 OUT_XPI    = os.path.join(SCRIPT_DIR, f'fetchgate-{VERSION}.xpi')
 
 AMO_DESCRIPTION = """\
-FetchGate bridges an external process to a live, logged-in browser tab  -  run \
+FetchGate bridges an external process to a live, logged-in browser tab - run \
 authenticated fetch() calls or arbitrary JavaScript inside the tab, inheriting \
 its full session state.
 
@@ -44,12 +44,12 @@ programmable endpoint for your code.
 
 Two modes:
 
-• Fetch mode  -  your code sends a request spec; the extension executes the \
+• Fetch mode - your code sends a request spec; the extension executes the \
 corresponding fetch() inside the active tab and returns the full HTTP response, \
 inheriting all session state automatically. No credentials need to be extracted \
 or replayed.
 
-• JS mode  -  your code sends a JavaScript snippet; the extension executes it as \
+• JS mode - your code sends a JavaScript snippet; the extension executes it as \
 an async function body inside the tab and returns the result. This lets you \
 traverse the DOM, call internal APIs, or run logic that depends on live page state.
 
@@ -58,21 +58,21 @@ no public API, or that actively block third-party HTTP clients.
 
 Control:
 
-• Toolbar popup  -  four states: Disarmed, Armed, Host disconnected, Armed on \
+• Toolbar popup - four states: Disarmed, Armed, Host disconnected, Armed on \
 other tab. Each state shows a single context-appropriate action button.
 
-• Keyboard shortcut  -  default Ctrl+Shift+F, fully configurable from the popup. \
+• Keyboard shortcut - default Ctrl+Shift+F, fully configurable from the popup. \
 Includes a verification step that confirms the key is actually delivered by \
 Firefox and the OS (some combinations are silently captured before the extension \
 sees them).
 
 Three native host implementations:
 
-• Java host  -  persistent TCP server on localhost:9919; callers connect in any language.
+• Java host - persistent TCP server on localhost:9919; callers connect in any language.
 
-• Python TCP host  -  drop-in Python replacement for the Java host; no JDK required.
+• Python TCP host - drop-in Python replacement for the Java host; no JDK required.
 
-• Python embedded host  -  your Python script IS the host; Firefox launches it \
+• Python embedded host - your Python script IS the host; Firefox launches it \
 when you arm a tab.
 
 Platform: GNU/Linux only.
@@ -110,7 +110,7 @@ def _send(make_req):
                     wait = int(json.loads(err).get('detail', '').split()[-2]) + 2
                 except Exception:
                     wait = 30
-                print(f"  Rate limited  -  waiting {wait}s...")
+                print(f"  Rate limited - waiting {wait}s...")
                 time.sleep(wait)
                 continue
             print(f"  HTTP {e.code}: {err[:500]}", file=sys.stderr)
@@ -218,7 +218,7 @@ def wait_for_public(version_id, jwt_fn):
             print(f"  File entered terminal state: {status}", file=sys.stderr)
             sys.exit(1)
         time.sleep(10)
-    raise TimeoutError("Timed out waiting for file to go public  -  it may be in manual review. Check AMO.")
+    raise TimeoutError("Timed out waiting for file to go public - it may be in manual review. Check AMO.")
 
 
 def download_signed(url, jwt_fn):
@@ -239,9 +239,9 @@ def update_description(jwt_fn):
 
 def upload_screenshots(jwt_fn):
     shots = [
-        ('popup_disarmed.png',    'FetchGate popup  -  disarmed state'),
-        ('popup_armed.png',       'FetchGate popup  -  armed, host connected'),
-        ('popup_armed_other.png', 'FetchGate popup  -  armed on a different tab'),
+        ('popup_disarmed.png',    'FetchGate popup - disarmed state'),
+        ('popup_armed.png',       'FetchGate popup - armed, host connected'),
+        ('popup_armed_other.png', 'FetchGate popup - armed on a different tab'),
     ]
 
     # Remove existing previews to avoid duplicates on re-run
