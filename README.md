@@ -448,7 +448,7 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
 - **No request timeout. *(Python hosts only)*** `fetch()` blocks until the
   extension replies or the Native Messaging connection closes. If the server
   being queried is slow or unresponsive, the host will block indefinitely.
-  TCP callers (e.g. hunter.py) can impose their own socket timeout on the
+  TCP callers (e.g. fg.py) can impose their own socket timeout on the
   client side independently of this.
 
 - **One armed tab at a time.** The extension tracks a single armed tab. Arming
