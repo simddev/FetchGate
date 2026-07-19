@@ -33,13 +33,51 @@ let lastActiveTabId = null;
 browser.tabs.query({ active: true, currentWindow: true }).then(([t]) => { if (t) lastActiveTabId = t.id; });
 browser.tabs.onActivated.addListener(({ tabId }) => { lastActiveTabId = tabId; });
 
-// Restore armed state after an extension reload or browser restart.
-// Without this, any restart silently clears the armed tab with no notification.
-browser.storage.local.get('armedTabId').then(({ armedTabId: savedId }) => {
-    if (savedId == null) return;
-    browser.tabs.get(savedId)
-        .then(() => arm(savedId))
-        .catch(() => browser.storage.local.remove('armedTabId'));
+// Auto-arm: hostname from which a tab is automatically armed when it loads.
+// Kept in sync with storage so onUpdated can check without a storage round-trip.
+let autoArmUrl      = null;
+let autoArmEnabled  = false;
+let autoArmHostname = null; // cached hostname from autoArmUrl; null disables auto-arm
+
+browser.storage.onChanged.addListener((changes) => {
+    if ('autoArmUrl' in changes) {
+        autoArmUrl = changes.autoArmUrl.newValue ?? null;
+        syncAutoArmHostname();
+    }
+    if ('autoArmEnabled' in changes) autoArmEnabled = changes.autoArmEnabled.newValue ?? false;
+});
+
+// Restore armed state after an extension reload or browser restart, then run the
+// auto-arm startup scan if no previously armed tab was restored.
+browser.storage.local.get(['armedTabId', 'autoArmUrl', 'autoArmEnabled']).then(async ({ armedTabId: savedId, autoArmUrl: savedUrl, autoArmEnabled: savedEnabled }) => {
+    autoArmUrl = savedUrl ?? null;
+    syncAutoArmHostname();
+    autoArmEnabled = savedEnabled ?? false;
+
+    if (savedId != null) {
+        try {
+            await browser.tabs.get(savedId);
+            arm(savedId);
+            return;
+        } catch (_) {
+            browser.storage.local.remove('armedTabId');
+        }
+    }
+
+    if (!autoArmHostname || !autoArmEnabled) return;
+    const tabs = await browser.tabs.query({});
+    if (armedTabId !== null) return;
+    for (const tab of tabs) {
+        if (!tab.url || !matchesAutoArm(tab.url)) continue;
+        if (tab.discarded) {
+            // Force the tab to load so onUpdated fires and arms it.
+            browser.tabs.reload(tab.id).catch(() => {});
+        } else if (tab.status === 'complete') {
+            arm(tab.id);
+        }
+        // status === 'loading': onUpdated catches it when complete.
+        break;
+    }
 });
 
 // ─── Notifications ───────────────────────────────────────────────────────────
@@ -148,17 +186,18 @@ async function onRequestFromHost(msg) {
 // ─── Tab arming ──────────────────────────────────────────────────────────────
 
 async function arm(tabId) {
-    // Inject first: only mark the tab armed if injection actually succeeds.
-    // On privileged pages (about:*, browser settings) executeScript throws  - 
-    // proceeding would leave a green badge on a tab that cannot serve requests.
+    // Claim the slot synchronously before any await to prevent concurrent arm() calls
+    // from both passing the armedTabId === null guard in onUpdated or the startup scan.
+    // If injection fails, the slot is released so future auto-arm attempts can retry.
+    armedTabId = tabId;
     try {
         await browser.tabs.executeScript(tabId, { file: 'content_script.js' });
     } catch (e) {
         console.error('[FetchGate] Script injection failed:', e.message);
+        armedTabId = null;
         return; // leave badge unchanged; tab is not armed
     }
 
-    armedTabId = tabId;
     lastDisarmReason = null;
     browser.storage.local.set({ armedTabId: tabId });
     browser.browserAction.setBadgeText({ text: 'ON', tabId });
@@ -252,6 +291,24 @@ browser.commands.onCommand.addListener((command) => {
 
 // ─── Tab lifecycle ───────────────────────────────────────────────────────────
 
+function syncAutoArmHostname() {
+    if (!autoArmUrl) { autoArmHostname = null; return; }
+    try {
+        autoArmHostname = new URL(autoArmUrl).hostname || null; // null for file:// ('')
+    } catch (_) {
+        autoArmHostname = null;
+    }
+}
+
+function matchesAutoArm(tabUrl) {
+    if (!autoArmHostname) return false;
+    try {
+        return new URL(tabUrl).hostname === autoArmHostname;
+    } catch (_) {
+        return false;
+    }
+}
+
 // If the armed tab is closed, clear state.
 browser.tabs.onRemoved.addListener((tabId) => {
     if (tabId === armedTabId) {
@@ -263,7 +320,9 @@ browser.tabs.onRemoved.addListener((tabId) => {
 // (the previous page's content script is destroyed on navigation).
 // If re-injection fails (e.g. navigated to a privileged page), disarm so
 // the badge does not falsely show ON for a tab that cannot serve requests.
-browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
+// Also auto-arms any tab that finishes loading on the configured hostname
+// when no tab is currently armed.
+browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (tabId === armedTabId && changeInfo.status === 'complete') {
         browser.tabs.executeScript(tabId, { file: 'content_script.js' })
                .then(() => {
@@ -283,5 +342,10 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
                        disarm(tabId, 'The tab navigated to a restricted page - re-arm to continue.');
                    }
                });
+    }
+
+    if (changeInfo.status === 'complete' && armedTabId === null &&
+            autoArmEnabled && tab.url && matchesAutoArm(tab.url)) {
+        arm(tabId);
     }
 });

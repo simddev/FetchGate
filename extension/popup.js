@@ -6,6 +6,7 @@ const statusDetail = document.getElementById('status-detail');
 const actionBtn    = document.getElementById('action-btn');
 const shortcutVal  = document.getElementById('shortcut-val');
 const shortcutRow  = document.getElementById('shortcut-row');
+const autoarmRight = document.getElementById('autoarm-right');
 
 // Module-level so all functions (including startRecording's closures) can reach it.
 let bg = null;
@@ -29,6 +30,7 @@ async function init() {
 
     await refreshShortcut();
     shortcutRow.addEventListener('click', startRecording);
+    await refreshAutoArm();
 }
 
 async function renderStatus() {
@@ -98,7 +100,8 @@ async function refreshShortcut() {
     shortcutVal.textContent = cmd?.shortcut || 'Not set';
 }
 
-let recording = false;
+let recording      = false;
+let autoarmEditing = false;
 
 function startRecording() {
     if (recording) return;
@@ -121,6 +124,7 @@ function startRecording() {
     }
 
     function onKey(e) {
+        if (autoarmEditing) return;
         e.preventDefault();
         e.stopPropagation();
 
@@ -252,6 +256,109 @@ function setBtn(style, label, onClick) {
     actionBtn.className = `btn-${style}`;
     actionBtn.textContent = label;
     actionBtn.onclick = onClick;  // assignment replaces the previous handler on each poll
+}
+
+// ── Auto-arm ─────────────────────────────────────────────────────────────────
+
+async function refreshAutoArm() {
+    if (autoarmEditing) return;
+    const { autoArmUrl, autoArmEnabled } = await browser.storage.local.get(['autoArmUrl', 'autoArmEnabled']);
+    renderAutoArm(autoArmUrl || null, !!autoArmEnabled);
+}
+
+function renderAutoArm(url, enabled) {
+    autoarmRight.innerHTML = '';
+    if (!url) {
+        const btn = document.createElement('span');
+        btn.className = 'aa-btn';
+        btn.textContent = 'Set';
+        btn.addEventListener('click', () => startAutoArmEdit(''));
+        autoarmRight.appendChild(btn);
+        return;
+    }
+
+    const urlSpan = document.createElement('span');
+    urlSpan.id = 'autoarm-url';
+    urlSpan.textContent = url;
+    urlSpan.title = url;
+
+    const changeBtn = document.createElement('span');
+    changeBtn.className = 'aa-btn';
+    changeBtn.textContent = '✎';
+    changeBtn.title = 'Change URL';
+    changeBtn.addEventListener('click', () => startAutoArmEdit(url, enabled));
+
+    const toggleBtn = document.createElement('span');
+    toggleBtn.className = enabled ? 'aa-btn on' : 'aa-btn';
+    toggleBtn.textContent = enabled ? 'on' : 'off';
+    toggleBtn.title = enabled ? 'Auto-arm enabled – click to disable' : 'Auto-arm disabled – click to enable';
+    toggleBtn.addEventListener('click', async () => {
+        try {
+            await browser.storage.local.set({ autoArmEnabled: !enabled });
+        } finally {
+            refreshAutoArm();
+        }
+    });
+
+    autoarmRight.append(urlSpan, changeBtn, toggleBtn);
+}
+
+function startAutoArmEdit(currentUrl, knownEnabled) {
+    autoarmEditing = true;
+    autoarmRight.innerHTML = '';
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'autoarm-input';
+    input.value = currentUrl;
+    input.placeholder = 'https://…';
+
+    const saveBtn = document.createElement('span');
+    saveBtn.className = 'aa-btn';
+    saveBtn.textContent = '✓';
+    saveBtn.title = 'Save';
+    saveBtn.addEventListener('click', () => commitAutoArm(input.value.trim(), knownEnabled));
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter')  { e.preventDefault(); commitAutoArm(input.value.trim(), knownEnabled); }
+        if (e.key === 'Escape') { autoarmEditing = false; refreshAutoArm(); }
+    });
+
+    autoarmRight.append(input, saveBtn);
+    input.focus();
+    if (currentUrl) input.select();
+}
+
+async function commitAutoArm(raw, knownEnabled) {
+    if (!raw) {
+        try {
+            await browser.storage.local.remove(['autoArmUrl', 'autoArmEnabled']);
+        } catch (_) {}
+        finally {
+            autoarmEditing = false;
+            refreshAutoArm();
+        }
+        return;
+    }
+    let url = raw;
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+    try {
+        new URL(url);
+    } catch (_) {
+        const input = document.getElementById('autoarm-input');
+        if (input) {
+            input.style.borderColor = '#cc3333';
+            setTimeout(() => { if (input) input.style.borderColor = ''; }, 800);
+        }
+        return; // stay in edit mode on invalid URL
+    }
+    try {
+        await browser.storage.local.set({ autoArmUrl: url, autoArmEnabled: knownEnabled ?? true });
+    } catch (_) {}
+    finally {
+        autoarmEditing = false;
+        refreshAutoArm();
+    }
 }
 
 init();

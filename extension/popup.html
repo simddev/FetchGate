@@ -139,12 +139,49 @@
     }
     .host-help:hover { background: #3a3a3a; color: #ccc; }
 
-    /* placeholder styling - remove when features are wired up */
-    .option-row.placeholder {
-      opacity: 0.4;
+    /* ── Auto-arm row ── */
+    #autoarm-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    #autoarm-url {
+      font-family: monospace;
+      font-size: 11px;
+      background: #2e2e2e;
+      padding: 1px 5px;
+      border-radius: 3px;
+      max-width: 72px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
       cursor: default;
+      color: #bbb;
+    }
+    .aa-btn {
+      font-family: monospace;
+      font-size: 11px;
+      background: #2e2e2e;
+      color: #777;
+      padding: 1px 5px;
+      border-radius: 3px;
+      cursor: pointer;
       user-select: none;
     }
+    .aa-btn:hover { background: #3a3a3a; color: #ccc; }
+    .aa-btn.on { color: #00cc55; }
+    #autoarm-input {
+      font-family: monospace;
+      font-size: 11px;
+      background: #2e2e2e;
+      color: #e0e0e0;
+      border: 1px solid #555;
+      border-radius: 3px;
+      padding: 1px 4px;
+      width: 115px;
+      outline: none;
+    }
+    #autoarm-input:focus { border-color: #226699; }
   </style>
 </head>
 <body>
@@ -170,9 +207,9 @@
       <span>Shortcut</span>
       <span id="shortcut-val"> - </span>
     </div>
-    <div class="option-row placeholder">
+    <div class="option-row" id="autoarm-row">
       <span>Auto-arm this URL</span>
-      <span>coming soon</span>
+      <span id="autoarm-right"></span>
     </div>
   </div>
 
