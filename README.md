@@ -249,7 +249,7 @@ Full step-by-step instructions for all hosts are in **[INSTALL.md](INSTALL.md)**
 
 ### Step 1 - Install the extension
 
-Download **[fetchgate-0.2.6.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
+Download **[fetchgate-0.2.7.xpi](https://github.com/simddev/FetchGate/releases/latest)** from the Releases page, then install it in Firefox or LibreWolf using either method:
 
 - **Drag and drop:** drag the `.xpi` file into any browser window and click **Add** when prompted.
 - **From the Add-ons Manager:** open `about:addons`, click the gear icon ⚙ → **Install Add-on From File**, and select the `.xpi`.
@@ -448,8 +448,8 @@ machine. Do not run the Java host on shared or multi-user infrastructure.
 - **No request timeout. *(Python hosts only)*** `fetch()` blocks until the
   extension replies or the Native Messaging connection closes. If the server
   being queried is slow or unresponsive, the host will block indefinitely.
-  TCP callers (e.g. fg.py) can impose their own socket timeout on the
-  client side independently of this.
+  TCP callers can impose their own socket timeout on the client side
+  independently of this.
 
 - **One armed tab at a time.** The extension tracks a single armed tab. Arming
   a second tab automatically disarms the first. After a disconnect (ERR badge),

@@ -10,9 +10,11 @@
     if (window.__fetchGateInstalled) return;
     window.__fetchGateInstalled = true;
 
+    // Web pages cannot reach runtime.onMessage in a content script (Firefox
+    // enforces isolation), so no sender-origin check is needed here.
     browser.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         const work = (request.js != null) ? executeJs(request) : executeFetch(request);
-        work.then(sendResponse);
+        work.then(sendResponse).catch(e => sendResponse({ error: e.message }));
         return true; // keep the message channel open while the Promise resolves
     });
 
@@ -70,6 +72,8 @@
 
     async function executeFetch(spec) {
         try {
+            if (spec.url == null || spec.url === '') return { error: "missing 'url'" };
+
             const init = { method: spec.method || 'GET' };
             if (spec.headers     != null) init.headers     = spec.headers;
             if (spec.body        != null) init.body        = spec.body;
@@ -83,7 +87,9 @@
 
             // Headers with multiple values (e.g. Set-Cookie) are collapsed to the
             // last value. Sufficient for JSON/HTML API use cases.
-            const headers = {};
+            // Object.create(null) avoids silent data loss for a header literally
+            // named "__proto__" (assigning to __proto__ on {} is a no-op).
+            const headers = Object.create(null);
             response.headers.forEach((value, name) => { headers[name] = value; });
 
             const body = await response.text();

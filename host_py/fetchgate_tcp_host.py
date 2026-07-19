@@ -4,12 +4,12 @@
 A pure-Python drop-in replacement for the Java host. This script runs as the
 Firefox Native Messaging host while simultaneously exposing the same TCP
 interface on localhost:9919 that the Java host provides. Any tool built for
-the Java host (e.g. fg.py) works without changes.
+the Java host works without changes.
 
 Architecture
 ------------
 
-    Tool (fg.py, ...)
+    Caller script
         ↓ newline-delimited JSON over TCP  localhost:9919
     This script  (fetchgate_tcp_host.py)
         ↓ Firefox Native Messaging  stdin/stdout  (launched by Firefox)
@@ -28,7 +28,7 @@ Setup
        cp fetchgate_tcp_py.json ~/.mozilla/native-messaging-hosts/fetchgate.json
 
 4. Arm a tab in Firefox - click the toolbar button. Firefox launches this
-   script, which prints "Listening on localhost:9919" to stderr (visible in
+   script, which prints "Listening on 127.0.0.1:9919" to stderr (visible in
    the Firefox Browser Console) and waits for TCP connections.
 
 Notes
@@ -57,7 +57,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from fetchgate import FetchGate, FetchGateError, FetchGateSizeError
 
-TCP_HOST = "localhost"
+TCP_HOST = "127.0.0.1"
 TCP_PORT = 9919
 RECV_SIZE = 65536
 MAX_RECV_BYTES = 1_048_576  # reject before calling fg.fetch() to avoid false nm_dead

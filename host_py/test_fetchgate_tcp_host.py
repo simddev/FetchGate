@@ -7,6 +7,8 @@ Run from the project root:
 No external dependencies - standard library only.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import socket

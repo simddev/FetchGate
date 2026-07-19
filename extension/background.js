@@ -14,6 +14,13 @@ let armedTabId = null;
 // The Native Messaging port to the native host (null = not connected).
 let port = null;
 
+// Whether the current NM connection has been confirmed as working.
+// Reset to false each time connect() opens a new port.
+// Set to true either when the first NM message arrives (immediate confirmation)
+// or when the 400 ms timer fires without a disconnect (fallback for idle hosts).
+// Checked by onDisconnect to distinguish "host not found" from "host stopped".
+let hostConfirmed = false;
+
 // The reason the tab was last disarmed, and which tab it was.
 // Only shown in the popup when the popup is open on that same tab,
 // so unrelated tabs see a neutral "No tab is currently armed." instead.
@@ -52,12 +59,15 @@ function connect() {
     port = browser.runtime.connectNative('fetchgate');
     port.onMessage.addListener(onRequestFromHost);
 
-    // Give the host 400 ms to stay alive before declaring the connection good.
-    // If the host binary is missing, Firefox disconnects the port within milliseconds  - 
-    // the timer lets us tell "host not found" apart from "host ran fine but later stopped".
+    // Reset confirmation state for this new connection.
+    // Give the host 400 ms to stay alive as a fallback: if the host binary is
+    // missing, Firefox disconnects the port within milliseconds, and hostConfirmed
+    // will still be false when onDisconnect fires. For hosts that do receive
+    // requests, onRequestFromHost sets hostConfirmed = true immediately on the
+    // first message, before the timer fires.
     // Capture armedTabId now: if the user arms a different tab before the timer fires,
     // armedTabId will have changed and we must not fire a stale "Armed" notification.
-    let hostConfirmed = false;
+    hostConfirmed = false;
     const armedTabAtConnect = armedTabId;
     const confirmTimer = setTimeout(() => {
         hostConfirmed = true;
@@ -94,6 +104,10 @@ function connect() {
 // requests and discard stale ones. req is parsed with JSON.parse() here,
 // which validates JSON structure before anything reaches the content script.
 async function onRequestFromHost(msg) {
+    // A message from the host proves it started successfully.
+    // Set now so onDisconnect doesn't misreport a fast-running host as "not found".
+    hostConfirmed = true;
+
     const id        = msg.__fg_id;
     // Capture the port that delivered this request. The fetch() is async and may
     // outlive the current port (e.g. if the host disconnects and reconnects before
@@ -102,8 +116,12 @@ async function onRequestFromHost(msg) {
     const replyPort = port;
 
     function reply(r) {
-        if (replyPort) replyPort.postMessage(r);
-        else console.error('[FetchGate] Cannot reply - originating port disconnected.');
+        if (replyPort) {
+            try { replyPort.postMessage(r); }
+            catch (_) { console.error('[FetchGate] Cannot reply - port disconnected mid-request.'); }
+        } else {
+            console.error('[FetchGate] Cannot reply - originating port disconnected.');
+        }
     }
 
     let request;
@@ -121,7 +139,7 @@ async function onRequestFromHost(msg) {
 
     try {
         const response = await browser.tabs.sendMessage(armedTabId, request);
-        reply({ __fg_id: id, ...response });
+        reply({ __fg_id: id, ...(response ?? { error: 'no response from content script' }) });
     } catch (e) {
         reply({ __fg_id: id, error: e.message });
     }
