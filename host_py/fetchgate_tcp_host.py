@@ -36,10 +36,10 @@ Notes
 - Only one NM request is in flight at a time - NM is serial by design.
   Concurrent TCP clients are accepted and handled in threads; each waits for
   the lock before forwarding to the browser.
-- When Firefox closes the NM connection, the next fg.fetch() call raises
-  FetchGateError and nm_dead is set - subsequent TCP clients receive an error.
-  If no client is connected at that moment, the process continues running
-  until killed (e.g. when Firefox itself exits and the OS reclaims the process).
+- When Firefox closes the NM connection the process exits promptly: the
+  _monitor_nm_pipe thread detects stdin EOF and closes the server socket.
+  If a request is in flight, handle_client detects the broken pipe via
+  FetchGateError and sets nm_dead; the monitor notices within 0.25 s.
 - Do not write to sys.stdout after constructing FetchGate() - it is redirected
   to sys.stderr to protect the NM binary stream. All print() calls here go to
   stderr, which is what the Firefox Browser Console shows.
@@ -48,9 +48,11 @@ Notes
 """
 
 import json
+import select
 import socket
 import sys
 import threading
+import time
 from pathlib import Path
 
 # Allow importing fetchgate.py from the same directory, regardless of cwd.
@@ -136,6 +138,44 @@ def handle_client(
         conn.close()
 
 
+def _monitor_nm_pipe(
+    nm_dead: threading.Event,
+    lock: threading.Lock,
+    srv: socket.socket,
+    in_fd: int,
+) -> None:
+    """Set nm_dead and close srv when the NM stdin pipe reaches EOF.
+
+    Firefox only writes to stdin as a response to fg._write() calls.
+    When stdin is readable and no request is in flight (lock is free),
+    it must be EOF — Firefox closed the NM connection.
+
+    Closing srv unblocks srv.accept() in serve(), letting the process exit
+    promptly so a fresh NM host instance can bind port 9919 on reconnect.
+    """
+    while not nm_dead.is_set():
+        try:
+            readable, _, _ = select.select([in_fd], [], [], 0.25)
+        except (OSError, ValueError):
+            break  # fd is invalid; pipe already gone
+        if not readable:
+            continue
+        # stdin has data or EOF. If no request is in flight (lock free), it's EOF.
+        if not lock.acquire(blocking=False):
+            # A request is in flight; the data on stdin is a Firefox response.
+            # Sleep briefly so we don't spin while waiting for fg._read() to drain it.
+            time.sleep(0.005)
+            continue
+        # Acquired the lock with stdin readable → NM pipe EOF.
+        nm_dead.set()
+        lock.release()
+        break
+    try:
+        srv.close()
+    except OSError:
+        pass
+
+
 def serve(fg: FetchGate) -> None:
     """Bind the TCP server and dispatch each incoming connection to a thread."""
     lock = threading.Lock()
@@ -154,6 +194,12 @@ def serve(fg: FetchGate) -> None:
             sys.exit(1)
         srv.listen()
         print(f"Listening on {TCP_HOST}:{TCP_PORT}", file=sys.stderr)
+
+        threading.Thread(
+            target=_monitor_nm_pipe,
+            args=(nm_dead, lock, srv, fg._in.fileno()),
+            daemon=True,
+        ).start()
 
         while True:
             try:

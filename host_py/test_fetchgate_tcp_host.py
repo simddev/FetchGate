@@ -18,7 +18,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fetchgate import FetchGateError, FetchGateSizeError
-from fetchgate_tcp_host import _send, handle_client
+from fetchgate_tcp_host import _monitor_nm_pipe, _send, handle_client
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -303,6 +303,102 @@ class TestHandleClientNMFailure(unittest.TestCase):
         resp2 = json.loads(buf.decode().strip())
         self.assertIn("error", resp2)
         self.assertEqual(fg2.calls, [])
+
+
+# ── _monitor_nm_pipe ──────────────────────────────────────────────────────────
+
+
+class TestMonitorNmPipe(unittest.TestCase):
+
+    def test_eof_sets_nm_dead_and_closes_server(self):
+        """Closing the write end (Firefox disconnects) → nm_dead set + srv closed."""
+        r_fd, w_fd = os.pipe()
+        nm_dead = threading.Event()
+        lock = threading.Lock()
+        srv_a, srv_b = socket.socketpair()
+        try:
+            t = threading.Thread(
+                target=_monitor_nm_pipe,
+                args=(nm_dead, lock, srv_a, r_fd),
+                daemon=True,
+            )
+            t.start()
+            os.close(w_fd)  # EOF on the read end
+            t.join(timeout=3.0)
+            self.assertFalse(t.is_alive(), "monitor must exit after EOF")
+            self.assertTrue(nm_dead.is_set())
+            self.assertEqual(srv_a.fileno(), -1, "srv must be closed by monitor")
+        finally:
+            try:
+                os.close(r_fd)
+            except OSError:
+                pass
+            try:
+                srv_a.close()
+            except OSError:
+                pass
+            srv_b.close()
+
+    def test_data_while_lock_held_does_not_set_nm_dead(self):
+        """Response data arriving while a request is in flight must not trigger EOF logic."""
+        r_fd, w_fd = os.pipe()
+        nm_dead = threading.Event()
+        lock = threading.Lock()
+        srv_a, srv_b = socket.socketpair()
+        lock.acquire()  # simulate an in-flight request
+        try:
+            t = threading.Thread(
+                target=_monitor_nm_pipe,
+                args=(nm_dead, lock, srv_a, r_fd),
+                daemon=True,
+            )
+            t.start()
+            os.write(w_fd, b"\x04\x00\x00\x00")  # simulate Firefox response arriving
+            # Monitor must not set nm_dead while lock is held.
+            self.assertFalse(nm_dead.wait(timeout=0.3), "response data must not be treated as EOF")
+        finally:
+            # Signal the monitor to stop: set nm_dead, release lock, close pipe.
+            nm_dead.set()
+            lock.release()
+            try:
+                os.close(r_fd)
+            except OSError:
+                pass
+            try:
+                os.close(w_fd)
+            except OSError:
+                pass
+            t.join(timeout=2.0)
+            try:
+                srv_a.close()
+            except OSError:
+                pass
+            srv_b.close()
+
+    def test_exits_promptly_when_nm_dead_already_set(self):
+        """If nm_dead is already set before start, monitor exits without waiting on stdin."""
+        r_fd, w_fd = os.pipe()
+        nm_dead = threading.Event()
+        nm_dead.set()
+        lock = threading.Lock()
+        srv_a, srv_b = socket.socketpair()
+        try:
+            t = threading.Thread(
+                target=_monitor_nm_pipe,
+                args=(nm_dead, lock, srv_a, r_fd),
+                daemon=True,
+            )
+            t.start()
+            t.join(timeout=2.0)
+            self.assertFalse(t.is_alive(), "monitor must exit promptly when nm_dead already set")
+        finally:
+            os.close(r_fd)
+            os.close(w_fd)
+            try:
+                srv_a.close()
+            except OSError:
+                pass
+            srv_b.close()
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────
